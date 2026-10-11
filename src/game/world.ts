@@ -81,7 +81,7 @@ export class World {
     return { loaded: this.loaded.size, total: ZONES.length, zone: this.currentZone };
   }
 
-  async update(x: number, z: number): Promise<void> {
+  async update(x: number, z: number, detailRadius = 43): Promise<void> {
     if (this.disposed) return;
     this.lastX = x;
     this.lastZ = z;
@@ -89,7 +89,7 @@ export class World {
     this.currentZone = ordered[0].name;
     const pending: Promise<void>[] = [];
     for (const zone of ordered) {
-      if (zone.distance < 43 || zone.id === ordered[0].id) {
+      if (zone.distance < detailRadius || zone.id === ordered[0].id) {
         if (!this.loaded.has(zone.id) && !this.loading.has(zone.id)) {
           const request = loaders[zone.id]().then(module => {
             if (this.disposed) return;

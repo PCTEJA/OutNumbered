@@ -39,6 +39,9 @@ export class Game {
   private keys = new Set<string>();
   private players = new Map<string, RenderPlayer>();
   private previewAvatars: THREE.Group[] = [];
+  private previewLabels: HTMLElement[] = [];
+  private previewPoint = new THREE.Vector3();
+  private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   private effects = new Map<string, THREE.Group>();
   private flags = new Map<string, { group: THREE.Group; label: HTMLElement }>();
   private particles: { mesh: THREE.Mesh; velocity: THREE.Vector3; until: number }[] = [];
@@ -135,10 +138,14 @@ export class Game {
     this.previewTarget.set(zone.x, 0, zone.z);
     if (!this.previewAvatars.length) this.previewCenter.copy(this.previewTarget);
     this.callbacks.onStatus('LOADING PLAYGROUND');
-    await this.world.update(zone.x, zone.z);
+    // The elevated lobby camera sees adjacent arenas; load their skyline detail.
+    // Matches retain the normal distance-based streaming radius.
+    await this.world.update(zone.x, zone.z, 80);
     if (token !== this.previewToken || this.playing) return;
     this.previewAvatars.forEach(group => { this.scene.remove(group); disposeAvatar(group); });
     this.previewAvatars = [];
+    this.previewLabels.forEach(label => label.remove());
+    this.previewLabels = [];
     const poses = [[-2.5, 3.2, '4827'], [3, -2, '1936'], [9, -8, '7294'], [-5, -6, '3608'], [5, 7, '8261']];
     poses.forEach(([x, z, number], i) => {
       const avatar = createAvatar(String(number), i % 2 ? 'blue' : 'red', '');
@@ -147,6 +154,12 @@ export class Game {
       avatar.userData.previewBase = avatar.position.clone();
       this.scene.add(avatar);
       this.previewAvatars.push(avatar);
+      const label = document.createElement('span');
+      label.className = 'preview-player-label';
+      label.setAttribute('aria-hidden', 'true');
+      label.textContent = `${number}  ${['Kai', 'Nova', 'Mira', 'Zed', 'Ash'][i]}`;
+      this.host.append(label);
+      this.previewLabels.push(label);
     });
     this.callbacks.onStatus('EXPLORE THREE CONNECTED ARENAS');
   }
@@ -200,6 +213,9 @@ export class Game {
     this.previewAvatars.forEach(group => { this.scene.remove(group); disposeAvatar(group); });
     this.previewAvatars = [];
     this.playing = true;
+    this.camera.clearViewOffset();
+    this.previewLabels.forEach(label => label.remove());
+    this.previewLabels = [];
     this.controlling = false;
     this.equipment.visible = true;
     this.camera.fov = 72;
@@ -471,11 +487,27 @@ export class Game {
       this.previewCenter.lerp(this.previewTarget, Math.min(1, dt * 2.4));
       const center = this.previewCenter;
       const museum = this.map === 'museum';
-      this.camera.position.set(center.x + (museum ? 17 : 25) + Math.sin(seconds * .04) * 2, museum ? 5.2 : 21, center.z + (museum ? 19 : 29));
+      const drift = this.reducedMotion.matches ? 0 : Math.sin(seconds * .04) * 2;
+      this.camera.position.set(center.x + (museum ? 17 : 25) + drift, museum ? 5.2 : 25, center.z + (museum ? 19 : 29));
       this.camera.lookAt(center.x - 2, museum ? 1 : 0, center.z - 3);
       this.camera.fov = 55;
+      // Keep the focal point in the open space beside the play panel.
+      this.camera.setViewOffset(innerWidth, innerHeight, innerWidth > 900 ? -innerWidth * .12 : 0, 0, innerWidth, innerHeight);
       this.camera.updateProjectionMatrix();
-      this.previewAvatars.forEach((group, i) => { animateAvatar(group, seconds + i, i % 2 === 0); const base = group.userData.previewBase as THREE.Vector3; group.position.z = base.z + Math.sin(seconds * .35 + i) * .7; });
+      this.camera.updateMatrixWorld();
+      this.previewAvatars.forEach((group, i) => {
+        const motionTime = this.reducedMotion.matches ? 0 : seconds;
+        animateAvatar(group, motionTime + i, !this.reducedMotion.matches && i % 2 === 0);
+        const base = group.userData.previewBase as THREE.Vector3;
+        group.position.z = base.z + Math.sin(motionTime * .35 + i) * .7;
+        this.previewPoint.copy(group.position);
+        this.previewPoint.y += 2.8;
+        this.previewPoint.project(this.camera);
+        const label = this.previewLabels[i];
+        label.hidden = this.previewPoint.z > 1 || this.previewPoint.z < -1;
+        label.style.left = `${(this.previewPoint.x + 1) * innerWidth / 2}px`;
+        label.style.top = `${(1 - this.previewPoint.y) * innerHeight / 2}px`;
+      });
     } else {
       const { forward, strafe, sprint } = this.input();
       const moving = forward !== 0 || strafe !== 0;
@@ -590,6 +622,7 @@ export class Game {
     cancelAnimationFrame(this.frameId);
     this.abort.abort();
     this.previewAvatars.forEach(avatar => disposeAvatar(avatar));
+    this.previewLabels.forEach(label => label.remove());
     disposeAvatar(this.equipment);
     this.world.dispose();
     this.audio.dispose();
