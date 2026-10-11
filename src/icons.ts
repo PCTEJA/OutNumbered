@@ -1,0 +1,22 @@
+const paths: Record<string, string> = {
+  hash: '<path d="m9 3-3 18M18 3l-3 18M3 9h19M2 16h19"/>',
+  arrow: '<path d="M4 12h15m-6-6 6 6-6 6"/>',
+  target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4M1 12h4m14 0h4"/>',
+  team: '<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m1-17a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 5v2"/>',
+  flag: '<path d="M5 22V3m0 1c5-5 9 5 15 0v10c-6 5-10-5-15 0"/>',
+  bolt: '<path d="m13 2-9 12h7l-1 8 10-13h-8l1-7Z"/>',
+  eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+  binoculars: '<circle cx="6" cy="16" r="4"/><circle cx="18" cy="16" r="4"/><path d="m2 15 3-11h4l2 10m2 0 2-10h4l3 11M10 12h4"/>',
+  camera: '<rect x="2" y="6" width="20" height="15" rx="3"/><path d="m8 6 2-3h4l2 3"/><circle cx="12" cy="13" r="4"/>',
+  smoke: '<path d="M9 11V7h6v4m-3-4V3h5M7 11h10l3 10H4l3-10Zm3-6C5 4 5 0 8 0"/>',
+  sound: '<path d="m3 9 5 0 5-5v16l-5-5H3V9Zm13-2a8 8 0 0 1 0 10m3-13a12 12 0 0 1 0 16"/>',
+  settings: '<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor"/><circle cx="15" cy="17" r="3" fill="currentColor"/>',
+  close: '<path d="m6 6 12 12M6 18 18 6"/>',
+  keyboard: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M5 9h1m3 0h1m3 0h1m3 0h1M5 12h1m3 0h1m3 0h1m3 0h1M7 16h10"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/>',
+  chevron: '<path d="m9 5 7 7-7 7"/>',
+  check: '<path d="m5 12 4 4L19 6"/>',
+  copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V3H3v13h5"/>',
+  exit: '<path d="M10 4H3v16h7m4-14 6 6-6 6M8 12h12"/>',
+};
+export const icon = (name: string, cls = '') => `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] ?? paths.hash}</svg>`;

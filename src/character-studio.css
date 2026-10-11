@@ -1,0 +1,81 @@
+@import '@fontsource/barlow/400.css';
+@import '@fontsource/barlow/500.css';
+@import '@fontsource/barlow/600.css';
+@import '@fontsource/barlow/700.css';
+@import '@fontsource/barlow-condensed/700.css';
+
+:root { font-family: Barlow, sans-serif; color: #233f3b; background: #eeeae1; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { font: inherit; cursor: pointer; }
+button:focus-visible, a:focus-visible, canvas:focus-visible { outline: 3px solid #ba6c3f; outline-offset: 4px; }
+.studio-header { height: 91px; padding: 0 42px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #d8d5cb; }
+.wordmark { font-family: 'Barlow Condensed', sans-serif; font-size: 30px; font-weight: 700; letter-spacing: -.6px; text-decoration: none; color: inherit; }
+.wordmark span { color: #be6944; }
+.return-link { color: inherit; font-size: 14px; font-weight: 600; text-decoration: none; display: flex; align-items: center; gap: 12px; }
+.return-link:hover { color: #be6944; }
+.studio-layout { display: grid; grid-template-columns: 318px minmax(0, 1fr); height: calc(100dvh - 91px); }
+.studio-panel { padding: 42px 32px; border-right: 1px solid #d8d5cb; overflow-y: auto; }
+.eyebrow { font-size: 11px; letter-spacing: 2.1px; text-transform: uppercase; font-weight: 700; color: #9d6145; margin: 0 0 13px; }
+h1 { font-family: 'Barlow Condensed', sans-serif; font-size: 54px; font-weight: 700; line-height: .96; letter-spacing: -1px; margin: 0 0 16px; }
+.intro { color: #68756d; font-size: 14px; line-height: 1.5; margin: 0 0 33px; max-width: 24ch; }
+.control-group { margin: 0 0 25px; border: 0; padding: 0; min-width: 0; }
+.control-group legend { font-size: 11px; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; margin-bottom: 10px; }
+.segmented { display: flex; padding: 4px; background: #e2dfd6; border-radius: 9px; gap: 3px; }
+.segmented button { flex: 1; padding: 9px 4px; border: 0; border-radius: 6px; color: #65716a; background: transparent; font-size: 13px; font-weight: 600; }
+.segmented button[aria-pressed='true'] { background: #fffdf7; box-shadow: 0 2px 5px #283c3210; color: #233f3b; }
+.variants { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.variants button { display: flex; align-items: center; gap: 9px; border: 1px solid #d1d3c8; border-radius: 8px; color: inherit; background: transparent; padding: 11px 12px; font-size: 14px; font-weight: 600; }
+.variants button[aria-pressed='true'] { border-color: #274d43; background: #fffdf7; box-shadow: inset 0 0 0 1px #274d43; }
+.variant-dot { display: block; width: 18px; height: 18px; border-radius: 50%; background: var(--swatch); box-shadow: inset 0 0 0 4px #ffffff55; }
+.team-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; background: #648cbd; }
+.team-dot.red { background: #cc705d; }
+.equipment-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.equipment-controls button { padding: 11px 5px; border-radius: 7px; border: 1px solid #d1d3c8; background: transparent; color: #52635a; font-size: 13px; font-weight: 600; }
+.equipment-controls button[aria-pressed='true'] { background: #274d43; border-color: #274d43; color: #fffdf6; }
+.studio-viewport { position: relative; min-height: 0; overflow: hidden; background: #e9e7df; }
+.stage { position: absolute; inset: 0; }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.view-label { pointer-events: none; position: absolute; left: 35px; top: 30px; }
+.view-label strong { display: block; font-size: 13px; font-weight: 600; }
+.view-label span { display: block; font-size: 12px; color: #718077; margin-top: 5px; }
+.view-count { position: absolute; right: 34px; top: 28px; color: #758179; font-size: 12px; letter-spacing: 1px; pointer-events: none; }
+.view-count span { color: #294e42; font-weight: 600; }
+.stage-toolbar { position: absolute; bottom: 65px; left: 50%; transform: translateX(-50%); display: flex; padding: 5px; gap: 3px; border-radius: 30px; background: #fffdf6e8; box-shadow: 0 4px 24px #273b3010; border: 1px solid #ffffff90; white-space: nowrap; }
+.stage-toolbar button { padding: 10px 19px; border: 0; border-radius: 24px; color: #5e7065; background: transparent; font-size: 13px; font-weight: 600; }
+.stage-toolbar button[aria-pressed='true'] { background: #294e42; color: #fffdf5; }
+.stage-toolbar button:hover:not([aria-pressed='true']) { background: #eceee5; }
+.interaction-hint { position: absolute; bottom: 24px; left: 0; right: 0; margin: 0; color: #6b786e; text-align: center; font-size: 12px; pointer-events: none; }
+.interaction-hint span { margin: 0 10px; color: #99a195; }
+.studio-note { font-size: 12px; line-height: 1.5; color: #7b847b; padding-top: 20px; border-top: 1px solid #d8d5cb; margin: 28px 0 0; }
+[hidden] { display: none !important; }
+@media (max-width: 900px) {
+  .studio-header { padding: 0 24px; height: 76px; }
+  .studio-layout { grid-template-columns: 258px minmax(0, 1fr); height: calc(100dvh - 76px); }
+  .studio-panel { padding: 32px 24px; }
+  h1 { font-size: 46px; }
+  .view-label { left: 24px; top: 24px; }
+  .view-count { right: 24px; top: 23px; }
+  .stage-toolbar button { padding: 10px 13px; }
+}
+@media (max-width: 650px) {
+  .studio-header { height: 65px; padding: 0 20px; }
+  .wordmark { font-size: 25px; }
+  .return-link { font-size: 12px; }
+  .studio-layout { display: flex; flex-direction: column; height: auto; }
+  .studio-viewport { order: -1; height: 60dvh; min-height: 400px; max-height: 650px; border-bottom: 1px solid #d8d5cb; }
+  .studio-panel { border: 0; padding: 26px 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .panel-heading { grid-column: 1 / -1; }
+  h1 { font-size: 39px; line-height: 1; }
+  h1 br { display: none; }
+  .eyebrow { margin-bottom: 10px; }
+  .intro { max-width: none; margin: 0; }
+  .control-group { margin: 0; }
+  .studio-note { grid-column: 1 / -1; margin: 0; padding-top: 16px; }
+  .stage-toolbar { bottom: 46px; }
+  .interaction-hint { bottom: 17px; font-size: 11px; }
+  .view-label { top: 20px; left: 20px; }
+  .view-count { top: 20px; right: 20px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
