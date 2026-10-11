@@ -3,6 +3,7 @@ import { World } from './world';
 import { createAvatar, animateAvatar, updateAvatarNumber, disposeAvatar, createEquipment } from './avatar';
 import { loadCore, type GameCore } from './wasm';
 import { GameAudio } from './audio';
+import { AdaptiveResolution, renderPixelRatio } from './performance';
 import { ZONES, PLAYER_EYE_HEIGHT, WORLD_LIMITS, type MapId } from '../shared/world';
 import type { ClientMessage, ServerMessage, StateMessage, PlayerState, GameEvent, GadgetKind, GameMode } from '../shared/protocol';
 
@@ -26,6 +27,7 @@ export class Game {
   private state?: StateMessage;
   private id = '';
   private position = { x: 0, z: 0 };
+  private correction = { x: 0, z: 0 };
   private yaw = 0;
   private pitch = 0;
   private stamina = 100;
@@ -38,14 +40,17 @@ export class Game {
   private map: MapId = 'campus';
   private keys = new Set<string>();
   private players = new Map<string, RenderPlayer>();
-  private previewAvatars: THREE.Group[] = [];
-  private previewLabels: HTMLElement[] = [];
-  private previewPoint = new THREE.Vector3();
-  private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   private effects = new Map<string, THREE.Group>();
   private flags = new Map<string, { group: THREE.Group; label: HTMLElement }>();
   private particles: { mesh: THREE.Mesh; velocity: THREE.Vector3; until: number }[] = [];
   private equipment = new THREE.Group();
+  private equipmentCache = new Map<string, THREE.Group>();
+  private quality = '';
+  private resolution = new AdaptiveResolution();
+  private hudAt = 0;
+  private shadowAt = 0;
+  private targetPosition = new THREE.Vector3();
+  private markerPoint = new THREE.Vector3();
   private heldEquipment = 'binoculars';
   private equipmentReturnAt = 0;
   private equipmentReturnKind = 'binoculars';
@@ -66,27 +71,27 @@ export class Game {
   private respawning = false;
   private roundShown = false;
   private firstState = true;
-  private previewCenter = new THREE.Vector3();
-  private previewTarget = new THREE.Vector3();
-  private previewToken = 0;
   private jumpAt = 0;
 
   constructor(private host: HTMLElement, private callbacks: Callbacks) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(renderPixelRatio('auto', devicePixelRatio, innerWidth, innerHeight));
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
     this.renderer.domElement.tabIndex = 0;
+    this.renderer.domElement.hidden = true;
     this.renderer.domElement.setAttribute('aria-label', 'OutNumbered 3D game. WASD to move, mouse to look, digits and Enter to eliminate.');
     host.append(this.renderer.domElement);
-    this.world = new World(this.scene);
+    this.world = new World(this.scene, group => this.renderer.compileAsync(group, this.camera, this.scene));
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera);
     this.equipment = createEquipment('binoculars');
+    this.equipmentCache.set('binoculars', this.equipment);
     this.equipment.visible = false;
     this.camera.add(this.equipment);
     this.equipment.position.set(.34, -.42, -.62);
@@ -113,14 +118,28 @@ export class Game {
       this.callbacks.onPointerLock(this.controlling);
     }, { signal });
     window.addEventListener('blur', () => { this.keys.clear(); this.sendInput(); }, { signal });
-    this.frameId = requestAnimationFrame(time => this.frame(time));
+    document.addEventListener('visibilitychange', () => {
+      this.keys.clear(); this.sendInput();
+      cancelAnimationFrame(this.frameId);
+      this.resolution.reset();
+      if (!document.hidden && this.playing) {
+        this.lastFrame = performance.now();
+        this.frameId = requestAnimationFrame(time => this.frame(time));
+      }
+    }, { signal });
   }
 
   configure(settings: { volume: number; sensitivity: number; quality: string }) {
     this.audio.volume = clamp(settings.volume / 100, 0, 1);
     this.sensitivity = .0005 + settings.sensitivity * .000035;
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, settings.quality === 'low' ? 1 : 1.6));
-    this.renderer.shadowMap.enabled = settings.quality !== 'low';
+    const quality = ['auto', 'high', 'low'].includes(settings.quality) ? settings.quality : 'auto';
+    if (quality === this.quality) return;
+    this.quality = quality;
+    this.resolution.scale = 1;
+    this.resolution.reset();
+    this.renderer.shadowMap.enabled = quality !== 'low';
+    this.renderer.shadowMap.needsUpdate = true;
+    this.world.setQuality(quality);
     this.scene.traverse(object => {
       if (object instanceof THREE.Mesh) {
         const materials = Array.isArray(object.material) ? object.material : [object.material];
@@ -128,40 +147,6 @@ export class Game {
       }
     });
     this.resize();
-  }
-
-  async preview(map: MapId) {
-    if (this.playing) return;
-    const token = ++this.previewToken;
-    this.map = map;
-    const zone = ZONES.find(z => z.id === map)!;
-    this.previewTarget.set(zone.x, 0, zone.z);
-    if (!this.previewAvatars.length) this.previewCenter.copy(this.previewTarget);
-    this.callbacks.onStatus('LOADING PLAYGROUND');
-    // The elevated lobby camera sees adjacent arenas; load their skyline detail.
-    // Matches retain the normal distance-based streaming radius.
-    await this.world.update(zone.x, zone.z, 80);
-    if (token !== this.previewToken || this.playing) return;
-    this.previewAvatars.forEach(group => { this.scene.remove(group); disposeAvatar(group); });
-    this.previewAvatars = [];
-    this.previewLabels.forEach(label => label.remove());
-    this.previewLabels = [];
-    const poses = [[-2.5, 3.2, '4827'], [3, -2, '1936'], [9, -8, '7294'], [-5, -6, '3608'], [5, 7, '8261']];
-    poses.forEach(([x, z, number], i) => {
-      const avatar = createAvatar(String(number), i % 2 ? 'blue' : 'red', '');
-      avatar.position.set(zone.x + Number(x), 0, zone.z + Number(z));
-      avatar.rotation.y = .5 + i * .9;
-      avatar.userData.previewBase = avatar.position.clone();
-      this.scene.add(avatar);
-      this.previewAvatars.push(avatar);
-      const label = document.createElement('span');
-      label.className = 'preview-player-label';
-      label.setAttribute('aria-hidden', 'true');
-      label.textContent = `${number}  ${['Kai', 'Nova', 'Mira', 'Zed', 'Ash'][i]}`;
-      this.host.append(label);
-      this.previewLabels.push(label);
-    });
-    this.callbacks.onStatus('EXPLORE THREE CONNECTED ARENAS');
   }
 
   async start(options: Options): Promise<void> {
@@ -192,6 +177,7 @@ export class Game {
       socket.addEventListener('open', () => socket.send(JSON.stringify({ type: 'join', ...options })));
       socket.addEventListener('error', () => fail('Cannot reach the match server. Start the project with npm run dev, then try again.'));
       socket.addEventListener('message', event => {
+        if (this.socket !== socket) return;
         let message: ServerMessage;
         try { message = JSON.parse(event.data); } catch { return; }
         if (message.type === 'error') { if (!settled) fail(message.message); else this.toast(message.message); return; }
@@ -210,18 +196,33 @@ export class Game {
     const zone = ZONES.find(z => z.id === this.map)!;
     try { await this.world.update(zone.x, zone.z); }
     catch (error) { this.leave(); throw error; }
-    this.previewAvatars.forEach(group => { this.scene.remove(group); disposeAvatar(group); });
-    this.previewAvatars = [];
-    this.playing = true;
+    // Build tools between loading-screen paints, never on a player's first keypress.
+    for (const kind of ['camera', 'flash', 'smoke', 'distract']) {
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+      const equipment = createEquipment(kind);
+      this.equipmentCache.set(kind, equipment);
+      await this.renderer.compileAsync(equipment, this.camera, this.scene);
+    }
+    if (socket.readyState !== WebSocket.OPEN) throw new Error('Connection closed while preparing the arena. Please try again.');
     this.camera.clearViewOffset();
-    this.previewLabels.forEach(label => label.remove());
-    this.previewLabels = [];
     this.controlling = false;
     this.equipment.visible = true;
     this.camera.fov = 72;
     this.camera.updateProjectionMatrix();
     $('input-prompt').textContent = 'READ THEIR FOREHEAD. REMEMBER THE NUMBER.';
     $('hud-mode').textContent = modeNames[this.state?.mode ?? options.mode];
+    this.camera.position.set(this.position.x, PLAYER_EYE_HEIGHT, this.position.z);
+    this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+    this.callbacks.onStatus('PREPARING THE ARENA');
+    // Compile before handing over controls, so first use does not stall a live frame.
+    await this.renderer.compileAsync(this.scene, this.camera);
+    this.renderer.shadowMap.needsUpdate = true;
+    this.renderer.render(this.scene, this.camera);
+    this.renderer.domElement.hidden = false;
+    this.playing = true;
+    this.lastFrame = performance.now();
+    this.resolution.reset();
+    this.frameId = requestAnimationFrame(time => this.frame(time));
   }
 
   capture() {
@@ -283,9 +284,12 @@ export class Game {
     Array.from($('digits').children).forEach((child, i) => { child.textContent = this.digits[i] ?? '_'; child.classList.toggle('filled', i < this.digits.length); });
   }
   private changeEquipment(kind: string) {
+    if (this.heldEquipment === kind && this.equipmentCache.has(kind)) return;
     this.heldEquipment = kind;
-    disposeAvatar(this.equipment);
-    this.equipment = createEquipment(kind);
+    this.equipment.removeFromParent();
+    let equipment = this.equipmentCache.get(kind);
+    if (!equipment) { equipment = createEquipment(kind); this.equipmentCache.set(kind, equipment); }
+    this.equipment = equipment;
     this.equipment.position.set(.34, -.42, -.62);
     this.camera.add(this.equipment);
     this.equipment.visible = this.playing && !this.zoomed;
@@ -325,6 +329,7 @@ export class Game {
     if (!self) return;
     if (this.firstState || this.respawning && self.alive) {
       this.position = { x: self.x, z: self.z };
+      this.correction.x = this.correction.z = 0;
       this.yaw = self.yaw;
       this.pitch = 0;
       this.stamina = self.stamina;
@@ -333,9 +338,15 @@ export class Game {
       this.drawDigits();
     } else {
       const distance = Math.hypot(self.x - this.position.x, self.z - this.position.z);
-      const amount = distance > 2 ? 1 : distance > .35 ? .38 : 0;
-      this.position.x += (self.x - this.position.x) * amount;
-      this.position.z += (self.z - this.position.z) * amount;
+      if (distance > 2) {
+        this.position.x = self.x; this.position.z = self.z;
+        this.correction.x = this.correction.z = 0;
+      } else {
+        // Apply small authoritative corrections over rendered frames instead of
+        // jerking the camera every time a 20 Hz network snapshot arrives.
+        this.correction.x = distance > .35 ? self.x - this.position.x : 0;
+        this.correction.z = distance > .35 ? self.z - this.position.z : 0;
+      }
       if (Math.abs(self.stamina - this.stamina) > 3) this.stamina = self.stamina;
     }
     this.respawning = !self.alive;
@@ -479,99 +490,82 @@ export class Game {
   }
 
   private frame(time: number) {
+    if (!this.playing || document.hidden) return;
+    if (this.quality === 'auto' && this.resolution.sample(time - this.lastFrame)) this.resize();
     const dt = Math.min((time - this.lastFrame) / 1000, .06);
     this.lastFrame = time;
     const seconds = time / 1000;
     this.world.tick(seconds);
-    if (!this.playing) {
-      this.previewCenter.lerp(this.previewTarget, Math.min(1, dt * 2.4));
-      const center = this.previewCenter;
-      const museum = this.map === 'museum';
-      const drift = this.reducedMotion.matches ? 0 : Math.sin(seconds * .04) * 2;
-      this.camera.position.set(center.x + (museum ? 17 : 25) + drift, museum ? 5.2 : 25, center.z + (museum ? 19 : 29));
-      this.camera.lookAt(center.x - 2, museum ? 1 : 0, center.z - 3);
-      this.camera.fov = 55;
-      // Keep the focal point in the open space beside the play panel.
-      this.camera.setViewOffset(innerWidth, innerHeight, innerWidth > 900 ? -innerWidth * .12 : 0, 0, innerWidth, innerHeight);
-      this.camera.updateProjectionMatrix();
-      this.camera.updateMatrixWorld();
-      this.previewAvatars.forEach((group, i) => {
-        const motionTime = this.reducedMotion.matches ? 0 : seconds;
-        animateAvatar(group, motionTime + i, !this.reducedMotion.matches && i % 2 === 0);
-        const base = group.userData.previewBase as THREE.Vector3;
-        group.position.z = base.z + Math.sin(motionTime * .35 + i) * .7;
-        this.previewPoint.copy(group.position);
-        this.previewPoint.y += 2.8;
-        this.previewPoint.project(this.camera);
-        const label = this.previewLabels[i];
-        label.hidden = this.previewPoint.z > 1 || this.previewPoint.z < -1;
-        label.style.left = `${(this.previewPoint.x + 1) * innerWidth / 2}px`;
-        label.style.top = `${(1 - this.previewPoint.y) * innerHeight / 2}px`;
-      });
-    } else {
-      const { forward, strafe, sprint } = this.input();
-      const moving = forward !== 0 || strafe !== 0;
-      if (this.controlling) {
-        this.yaw += (Number(this.keys.has('ArrowLeft')) - Number(this.keys.has('ArrowRight'))) * dt * 1.7;
-        this.pitch = clamp(this.pitch + (Number(this.keys.has('ArrowUp')) - Number(this.keys.has('ArrowDown'))) * dt, -1.35, 1.35);
-      }
-      if (this.core) {
-        const speed = sprint ? 8 : 5;
-        const norm = Math.max(1, Math.hypot(forward, strafe));
-        const dx = (-Math.sin(this.yaw) * forward + Math.cos(this.yaw) * strafe) / norm * speed * dt;
-        const dz = (-Math.cos(this.yaw) * forward - Math.sin(this.yaw) * strafe) / norm * speed * dt;
-        this.position = this.core.move(this.position.x, this.position.z, dx, dz);
-        this.position.x = clamp(this.position.x, WORLD_LIMITS.minX + .38, WORLD_LIMITS.maxX - .38);
-        this.position.z = clamp(this.position.z, WORLD_LIMITS.minZ + .38, WORLD_LIMITS.maxZ - .38);
-        this.stamina = this.core.stamina(this.stamina, moving, sprint, dt);
-      }
-      if (moving && time - this.footstepAt > (sprint ? 260 : 380)) { this.audio.play('step'); this.footstepAt = time; }
-      const bob = moving ? Math.sin(seconds * (sprint ? 16 : 11)) * .032 : Math.sin(seconds * 2) * .006;
-      const jumpT = (time - this.jumpAt) / 650;
-      const hop = jumpT > 0 && jumpT < 1 ? Math.sin(jumpT * Math.PI) * .23 : 0;
-      this.camera.position.set(this.position.x, PLAYER_EYE_HEIGHT + bob + hop, this.position.z);
-      this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
-      const targetFov = this.zoomed ? 27 : sprint && moving ? 78 : 72;
-      this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, Math.min(dt * 10, 1));
-      this.camera.updateProjectionMatrix();
-      if (this.equipmentReturnAt && time > this.equipmentReturnAt) { this.changeEquipment(this.equipmentReturnKind); this.equipmentReturnAt = 0; }
-      const throwMotion = this.throwUntil > time ? Math.sin((this.throwUntil - time) / 450 * Math.PI) * .45 : 0;
-      const binoculars = this.heldEquipment === 'binoculars';
-      this.equipment.position.set((binoculars ? .23 : .34) + bob * .3, -.43 + bob * .45 - throwMotion, binoculars ? -.72 : -.65);
-      this.equipment.rotation.z = bob * .4;
-      this.equipment.visible = !this.zoomed && !this.respawning;
-      for (const rendered of this.players.values()) {
-        const { group, state } = rendered;
-        group.position.lerp(new THREE.Vector3(state.x, 0, state.z), Math.min(1, dt * 13));
-        let target = state.yaw + Math.PI;
-        const delta = Math.atan2(Math.sin(target - group.rotation.y), Math.cos(target - group.rotation.y));
-        group.rotation.y += delta * Math.min(1, dt * 12);
-        animateAvatar(group, seconds, rendered.moving);
-      }
-      for (const group of this.effects.values()) {
-        if (group.userData.kind === 'smoke') { group.rotation.y += dt * .08; group.scale.setScalar(1 + Math.sin(seconds * .8) * .06); }
-        else group.children.forEach(child => { if (child.userData.offset !== undefined) { const progress = (seconds * .65 + child.userData.offset / 3) % 1; child.scale.setScalar(.2 + progress * 6); } });
-      }
-      for (const flag of this.flags.values()) {
-        const point = ((flag.group.userData.markerPosition as THREE.Vector3) ?? flag.group.position).clone().project(this.camera);
-        flag.label.hidden = point.z > 1 || Math.abs(point.x) > 1 || Math.abs(point.y) > 1 || !flag.group.userData.markerVisible;
-        flag.label.style.left = `${(point.x * .5 + .5) * innerWidth}px`;
-        flag.label.style.top = `${(-point.y * .5 + .5) * innerHeight}px`;
-        flag.group.children[1].rotation.y = Math.sin(seconds * 2.8) * .13;
-      }
-      if (time - this.networkAt >= 50) { this.sendInput(); this.networkAt = time; }
-      if (time - this.worldAt > 600) {
-        this.worldAt = time;
-        this.world.update(this.position.x, this.position.z).catch(error => this.toast(`A map section could not load: ${error.message}`));
-        const zone = ZONES.reduce((a, b) => Math.hypot(a.x - this.position.x, a.z - this.position.z) < Math.hypot(b.x - this.position.x, b.z - this.position.z) ? a : b);
-        $('hud-zone').textContent = names[zone.id];
-        $('hud-stream').textContent = `WASM ACTIVE · ${this.world.status.loaded}/${this.world.status.total} SECTORS RESIDENT`;
-      }
-      $('stamina-fill').style.width = `${this.stamina}%`;
+    const { forward, strafe, sprint } = this.input();
+    const moving = forward !== 0 || strafe !== 0;
+    if (this.controlling) {
+      this.yaw += (Number(this.keys.has('ArrowLeft')) - Number(this.keys.has('ArrowRight'))) * dt * 1.7;
+      this.pitch = clamp(this.pitch + (Number(this.keys.has('ArrowUp')) - Number(this.keys.has('ArrowDown'))) * dt, -1.35, 1.35);
+    }
+    if (this.core) {
+      const correctionAmount = 1 - Math.exp(-dt * 9);
+      const corrected = this.core.move(this.position.x, this.position.z, this.correction.x * correctionAmount, this.correction.z * correctionAmount);
+      this.position = corrected;
+      this.correction.x *= 1 - correctionAmount;
+      this.correction.z *= 1 - correctionAmount;
+      const speed = sprint ? 8 : 5;
+      const norm = Math.max(1, Math.hypot(forward, strafe));
+      const dx = (-Math.sin(this.yaw) * forward + Math.cos(this.yaw) * strafe) / norm * speed * dt;
+      const dz = (-Math.cos(this.yaw) * forward - Math.sin(this.yaw) * strafe) / norm * speed * dt;
+      this.position = this.core.move(this.position.x, this.position.z, dx, dz);
+      this.position.x = clamp(this.position.x, WORLD_LIMITS.minX + .38, WORLD_LIMITS.maxX - .38);
+      this.position.z = clamp(this.position.z, WORLD_LIMITS.minZ + .38, WORLD_LIMITS.maxZ - .38);
+      this.stamina = this.core.stamina(this.stamina, moving, sprint, dt);
+    }
+    if (moving && time - this.footstepAt > (sprint ? 260 : 380)) { this.audio.play('step'); this.footstepAt = time; }
+    const bob = moving ? Math.sin(seconds * (sprint ? 16 : 11)) * .032 : Math.sin(seconds * 2) * .006;
+    const jumpT = (time - this.jumpAt) / 650;
+    const hop = jumpT > 0 && jumpT < 1 ? Math.sin(jumpT * Math.PI) * .23 : 0;
+    this.camera.position.set(this.position.x, PLAYER_EYE_HEIGHT + bob + hop, this.position.z);
+    this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+    const targetFov = this.zoomed ? 27 : sprint && moving ? 78 : 72;
+    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, Math.min(dt * 10, 1));
+    this.camera.updateProjectionMatrix();
+    if (this.equipmentReturnAt && time > this.equipmentReturnAt) { this.changeEquipment(this.equipmentReturnKind); this.equipmentReturnAt = 0; }
+    const throwMotion = this.throwUntil > time ? Math.sin((this.throwUntil - time) / 450 * Math.PI) * .45 : 0;
+    const binoculars = this.heldEquipment === 'binoculars';
+    this.equipment.position.set((binoculars ? .23 : .34) + bob * .3, -.43 + bob * .45 - throwMotion, binoculars ? -.72 : -.65);
+    this.equipment.rotation.z = bob * .4;
+    this.equipment.visible = !this.zoomed && !this.respawning;
+    for (const rendered of this.players.values()) {
+      const { group, state } = rendered;
+      if (!state.alive) continue;
+      group.position.lerp(this.targetPosition.set(state.x, 0, state.z), 1 - Math.exp(-dt * 13));
+      let target = state.yaw + Math.PI;
+      const delta = Math.atan2(Math.sin(target - group.rotation.y), Math.cos(target - group.rotation.y));
+      group.rotation.y += delta * Math.min(1, dt * 12);
+      animateAvatar(group, seconds, rendered.moving);
+    }
+    for (const group of this.effects.values()) {
+      if (group.userData.kind === 'smoke') { group.rotation.y += dt * .08; group.scale.setScalar(1 + Math.sin(seconds * .8) * .06); }
+      else group.children.forEach(child => { if (child.userData.offset !== undefined) { const progress = (seconds * .65 + child.userData.offset / 3) % 1; child.scale.setScalar(.2 + progress * 6); } });
+    }
+    for (const flag of this.flags.values()) {
+      const point = this.markerPoint.copy((flag.group.userData.markerPosition as THREE.Vector3) ?? flag.group.position).project(this.camera);
+      flag.label.hidden = point.z > 1 || Math.abs(point.x) > 1 || Math.abs(point.y) > 1 || !flag.group.userData.markerVisible;
+      flag.label.style.left = `${(point.x * .5 + .5) * innerWidth}px`;
+      flag.label.style.top = `${(-point.y * .5 + .5) * innerHeight}px`;
+      flag.group.children[1].rotation.y = Math.sin(seconds * 2.8) * .13;
+    }
+    if (time - this.networkAt >= 50) { this.sendInput(); this.networkAt = time; }
+    if (time - this.worldAt > 600) {
+      this.worldAt = time;
+      this.world.update(this.position.x, this.position.z).catch(error => this.toast(`A map section could not load: ${error.message}`));
+      const zone = ZONES.reduce((a, b) => Math.hypot(a.x - this.position.x, a.z - this.position.z) < Math.hypot(b.x - this.position.x, b.z - this.position.z) ? a : b);
+      $('hud-zone').textContent = names[zone.id];
+      $('hud-stream').textContent = `WASM ACTIVE · ${this.world.status.loaded}/${this.world.status.total} SECTORS RESIDENT`;
+    }
+    if (time - this.hudAt >= 100) {
+      this.hudAt = time;
+      $('stamina-fill').style.width = `${Math.round(this.stamina)}%`;
       $('stamina-value').textContent = String(Math.round(this.stamina));
       if (this.photoUntil > time) $('photo-countdown').textContent = `${Math.ceil((this.photoUntil - time) / 1000)}s`;
       else { $('photo').hidden = true; $('tool-camera').classList.remove('active'); }
-      $('flash-overlay').style.opacity = String(clamp((this.flashUntil - time) / 1400, 0, .98));
       if (this.respawning) {
         const self = this.state?.players.find(p => p.id === this.id);
         $('respawn-text').textContent = `Back in the game in ${Math.max(1, Math.ceil(((self?.respawnAt ?? 0) - Date.now() - this.serverOffset) / 1000))}…`;
@@ -581,8 +575,9 @@ export class Game {
       const cooldown = this.state?.cooldowns[this.gadget] ?? 0;
       $('grenade-name').textContent = cooldown > 0 ? `${Math.ceil(cooldown)}s RECHARGE` : this.gadget.toUpperCase();
     }
-    if (time > this.toastUntil) $('toast').classList.remove('visible');
-    if (time > this.hitUntil) $('hit-confirm').textContent = '';
+    $('flash-overlay').style.opacity = String(clamp((this.flashUntil - time) / 1400, 0, .98));
+    if (this.toastUntil && time > this.toastUntil) { $('toast').classList.remove('visible'); this.toastUntil = 0; }
+    if (this.hitUntil && time > this.hitUntil) { $('hit-confirm').textContent = ''; this.hitUntil = 0; }
     this.particles = this.particles.filter(particle => {
       if (time >= particle.until) { this.scene.remove(particle.mesh); particle.mesh.geometry.dispose(); (particle.mesh.material as THREE.Material).dispose(); return false; }
       particle.velocity.y -= dt * 3;
@@ -591,16 +586,26 @@ export class Game {
       (particle.mesh.material as THREE.MeshBasicMaterial).opacity = Math.min(1, (particle.until - time) / 600);
       return true;
     });
+    if (this.renderer.shadowMap.enabled && time - this.shadowAt >= (this.quality === 'high' ? 0 : 1000 / 30)) {
+      this.renderer.shadowMap.needsUpdate = true;
+      this.shadowAt = time;
+    }
     this.renderer.render(this.scene, this.camera);
     this.frameId = requestAnimationFrame(next => this.frame(next));
   }
 
-  private resize() { this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix(); this.renderer.setSize(innerWidth, innerHeight); }
+  private resize() {
+    this.camera.aspect = innerWidth / innerHeight;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setPixelRatio(renderPixelRatio(this.quality, devicePixelRatio, innerWidth, innerHeight, this.resolution.scale));
+    this.renderer.setSize(innerWidth, innerHeight);
+  }
   private disposeGroup(group: THREE.Group) {
     this.scene.remove(group);
     group.traverse(object => { if (object instanceof THREE.Mesh) { object.geometry.dispose(); (Array.isArray(object.material) ? object.material : [object.material]).forEach(m => m.dispose()); } });
   }
   leave() {
+    cancelAnimationFrame(this.frameId);
     this.playing = false;
     this.controlling = false;
     this.keys.clear();
@@ -621,9 +626,10 @@ export class Game {
     this.leave();
     cancelAnimationFrame(this.frameId);
     this.abort.abort();
-    this.previewAvatars.forEach(avatar => disposeAvatar(avatar));
-    this.previewLabels.forEach(label => label.remove());
-    disposeAvatar(this.equipment);
+    this.equipmentCache.forEach(equipment => disposeAvatar(equipment));
+    this.equipmentCache.clear();
+    for (const particle of this.particles) { particle.mesh.removeFromParent(); particle.mesh.geometry.dispose(); (particle.mesh.material as THREE.Material).dispose(); }
+    this.particles = [];
     this.world.dispose();
     this.audio.dispose();
     this.renderer.dispose();

@@ -9,7 +9,9 @@ export interface ZoneBuild {
 }
 
 export function standard(color: THREE.ColorRepresentation, roughness = 0.88) {
-  return new THREE.MeshStandardMaterial({ color, roughness });
+  const material = new THREE.MeshStandardMaterial({ color, roughness });
+  material.userData.staticPalette = `${material.color.getHex()}/${roughness}`;
+  return material;
 }
 
 export function mesh(parent: THREE.Object3D, geometry: THREE.BufferGeometry, material: THREE.Material, x = 0, y = 0, z = 0) {
@@ -229,9 +231,24 @@ export function flag(parent: THREE.Object3D, x: number, z: number, color: number
 }
 
 export function zoneResult(group: THREE.Group, tick?: (time: number) => void): ZoneBuild {
+  // Repeated benches, branches and trim use identical palette entries. Sharing
+  // within this zone lets them batch while preserving independent zone disposal.
+  const palette = new Map<string, THREE.Material>();
+  const replaced = new Set<THREE.Material>();
+  group.traverse(child => {
+    if (!(child instanceof THREE.Mesh) || Array.isArray(child.material)) return;
+    const material = child.material;
+    const key = material.userData.staticPalette as string | undefined;
+    if (!key) return;
+    const shared = palette.get(key);
+    if (shared && shared !== material) { child.material = shared; replaced.add(material); }
+    else palette.set(key, material);
+  });
+  replaced.forEach(material => material.dispose());
   // Collapse architectural details by material once, keeping animated flags and
   // instanced foliage separate. Hundreds of windows become a handful of draws.
   group.updateMatrixWorld(true);
+  const inverse = group.matrixWorld.clone().invert();
   const batches = new Map<string, THREE.Mesh[]>();
   group.traverse(child => {
     if (!(child instanceof THREE.Mesh) || child instanceof THREE.InstancedMesh || child.userData.flagOrigin || child.userData.dynamic || Array.isArray(child.material)) return;
@@ -245,7 +262,7 @@ export function zoneResult(group: THREE.Group, tick?: (time: number) => void): Z
     if (batch.length < 2) continue;
     const geometries = batch.map(original => {
       const geometry = original.geometry.index ? original.geometry.toNonIndexed() : original.geometry.clone();
-      geometry.applyMatrix4(original.matrixWorld);
+      geometry.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverse, original.matrixWorld));
       return geometry;
     });
     const merged = mergeGeometries(geometries, false);
@@ -257,6 +274,12 @@ export function zoneResult(group: THREE.Group, tick?: (time: number) => void): Z
     group.add(combined);
     batch.forEach(original => { original.removeFromParent(); original.geometry.dispose(); });
   }
+  // Architectural transforms never change; animated fabrics and ripples still do.
+  group.traverse(child => {
+    if (child.userData.dynamic || child.userData.flagOrigin) return;
+    child.updateMatrix();
+    child.matrixAutoUpdate = false;
+  });
   return {
     group,
     tick,
@@ -266,6 +289,7 @@ export function zoneResult(group: THREE.Group, tick?: (time: number) => void): Z
       const textures = new Set<THREE.Texture>();
       group.traverse((child) => {
         if (child instanceof THREE.Mesh) {
+          if (child instanceof THREE.InstancedMesh) child.dispose();
           geometries.add(child.geometry);
           for (const mat of Array.isArray(child.material) ? child.material : [child.material]) {
             materials.add(mat);

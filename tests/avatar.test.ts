@@ -91,7 +91,7 @@ test('character variants retain the playable scale and keep detailed geometry wi
       for (const value of positions.array) assert.ok(Number.isFinite(value), 'all model vertices must be finite');
       triangles += (mesh.geometry.index?.count ?? positions.count) / 3;
     }
-    assert.ok(meshes.length <= 65, `${meshes.length} meshes per character would multiply across a 20-player room`);
+    assert.ok(meshes.length <= 45, `${meshes.length} meshes per character would multiply across a 20-player room`);
     assert.ok(triangles <= 40000, `character has ${triangles} triangles`);
     const bounds = new THREE.Box3().setFromObject(avatar);
     assert.ok(bounds.min.y >= -0.025 && bounds.min.y <= 0.08, `feet must rest at floor height: ${bounds.min.y}`);

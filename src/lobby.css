@@ -13,6 +13,8 @@ html:has(.lobby), body:has(.lobby) { height: 100%; overflow: hidden; }
 }
 .menu-vignette { background: linear-gradient(0deg, #062d2cf5 0%, #0b34366b 18%, transparent 43%), linear-gradient(90deg, #133d3226, transparent 50%); }
 #world { overflow: hidden; }
+#arena-preview { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+#world > canvas { position: absolute; inset: 0; }
 .preview-player-label { position: absolute; transform: translate(-50%, -100%); color: #fffbed; background: #203b2bb3; border: 1px solid #fffbed66; border-radius: 4px; padding: 2px 7px; font: 600 12px 'Barlow Condensed', sans-serif; white-space: pre; pointer-events: none; }
 .topbar { height: auto; min-width: 0; padding: 0 3.5%; gap: clamp(24px, 3.2vw, 64px); background: #103431f5; color: var(--cream); border-bottom: 1px solid #ffffff16; }
 .wordmark { font-size: clamp(23px, 2vw, 34px); letter-spacing: -1px; }

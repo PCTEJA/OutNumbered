@@ -48,31 +48,44 @@ function curve(parent: THREE.Object3D, mat: THREE.Material, points: Point[], rad
   return part(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p))), segments, radius, 7, false), mat, parent);
 }
 
-/** Bake static detail per material within each articulated joint. No global GPU ownership. */
-function batchJoint(joint: THREE.Object3D) {
-  for (const child of [...joint.children]) if (!(child instanceof THREE.Mesh)) batchJoint(child);
-  const batches = new Map<THREE.Material, THREE.Mesh[]>();
-  for (const child of joint.children) {
-    if (!(child instanceof THREE.Mesh) || Array.isArray(child.material) || child.userData.keepSeparate) continue;
-    const meshes = batches.get(child.material) ?? [];
-    meshes.push(child);
-    batches.set(child.material, meshes);
+/** Bake detail per joint and surface finish, preserving palette colors per vertex. */
+function batchJoint(root: THREE.Object3D) {
+  const palette = new Map<number, THREE.MeshStandardMaterial>();
+  const replaced = new Set<THREE.Material>();
+  function bake(joint: THREE.Object3D) {
+    for (const child of [...joint.children]) if (!(child instanceof THREE.Mesh)) bake(child);
+    const batches = new Map<number, THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[]>();
+    for (const child of joint.children) {
+      if (!(child instanceof THREE.Mesh) || !(child.material instanceof THREE.MeshStandardMaterial) || child.userData.keepSeparate) continue;
+      const meshes = batches.get(child.material.roughness) ?? [];
+      meshes.push(child as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>);
+      batches.set(child.material.roughness, meshes);
+    }
+    for (const [roughness, meshes] of batches) {
+      const geometries = meshes.map(mesh => {
+        mesh.updateMatrix();
+        const geometry = mesh.geometry.clone().applyMatrix4(mesh.matrix);
+        const flat = geometry.index ? geometry.toNonIndexed() : geometry;
+        if (flat !== geometry) geometry.dispose();
+        const colors = new Float32Array(flat.attributes.position.count * 3);
+        const { r, g, b } = mesh.material.color;
+        for (let i = 0; i < colors.length; i += 3) { colors[i] = r; colors[i + 1] = g; colors[i + 2] = b; }
+        flat.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        return flat;
+      });
+      const merged = mergeGeometries(geometries, false)!;
+      geometries.forEach(geometry => geometry.dispose());
+      meshes.forEach(mesh => { replaced.add(mesh.material); mesh.geometry.dispose(); joint.remove(mesh); });
+      let mat = palette.get(roughness);
+      if (!mat) {
+        mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness, vertexColors: true });
+        palette.set(roughness, mat);
+      }
+      part(merged, mat, joint);
+    }
   }
-  for (const [mat, meshes] of batches) {
-    if (meshes.length < 2) continue;
-    const geometries = meshes.map(mesh => {
-      mesh.updateMatrix();
-      const geometry = mesh.geometry.clone().applyMatrix4(mesh.matrix);
-      // Geometry types have different index formats; normalize for reliable baking.
-      const flat = geometry.index ? geometry.toNonIndexed() : geometry;
-      if (flat !== geometry) geometry.dispose();
-      return flat;
-    });
-    const merged = mergeGeometries(geometries, false)!;
-    geometries.forEach(geometry => geometry.dispose());
-    meshes.forEach(mesh => { mesh.geometry.dispose(); joint.remove(mesh); });
-    part(merged, mat, joint);
-  }
+  bake(root);
+  replaced.forEach(mat => mat.dispose());
 }
 
 function numberTexture(number: string): THREE.CanvasTexture {

@@ -15,7 +15,7 @@ let game: Game | undefined;
 let starting = false;
 let playing = false;
 let practice = true;
-const settings = { volume: Number(safeRead('on-volume', '55')), sensitivity: Number(safeRead('on-sensitivity', '50')), quality: safeRead('on-quality', 'high') };
+const settings = { volume: Number(safeRead('on-volume', '55')), sensitivity: Number(safeRead('on-sensitivity', '50')), quality: safeRead('on-quality', 'auto') };
 const maps = {
   campus: { name: 'Schoolyard', subtitle: 'Sunlit courts. Close quarters.', label: 'THE SCHOOLYARD' },
   garden: { name: 'Garden Party', subtitle: 'Green hideouts. Long sightlines.', label: 'GARDEN PARTY' },
@@ -23,7 +23,7 @@ const maps = {
 };
 
 $('#app').innerHTML = `
-  <div id="world" aria-label="Live 3D arena preview"></div>
+  <div id="world" aria-label="Game arena"><img id="arena-preview" src="/arenas/garden.webp" alt="" fetchpriority="high" /></div>
   <div class="menu-vignette" id="menu-vignette"></div>
   <div id="lobby" class="lobby">
     <header class="topbar">
@@ -51,7 +51,7 @@ $('#app').innerHTML = `
         </div>
       </section>
       <section class="arena-stage" aria-label="Arena preview and selection">
-        <div class="preview-status" title="Live preview of the playable arena">${icon('eye')} ARENA PREVIEW <span id="preview-loading" class="sr-only" role="status">BUILDING THE PLAYGROUND</span></div>
+        <div class="preview-status" title="Preview of the playable arena">${icon('eye')} ARENA PREVIEW <span id="preview-loading" class="sr-only" role="status">READY WHEN YOU ARE</span></div>
         <div class="arena-bottom">
           <section class="scene-caption" aria-label="Arena information" aria-live="polite">
             <span class="scene-index" id="scene-index">PLAYGROUND 02</span>
@@ -110,7 +110,7 @@ $('#how-button').addEventListener('click', () => {
 });
 
 function showSettings() {
-  $('#modal-content').innerHTML = `<div class="eyebrow">MAKE YOURSELF COMFORTABLE</div><h2>Your game.<br>Your settings.</h2><div class="setting-row"><label for="volume">Sound volume</label><output id="volume-label">${settings.volume}%</output><input type="range" id="volume" min="0" max="100" value="${settings.volume}" /></div><div class="setting-row"><label for="sensitivity">Mouse sensitivity</label><output id="sensitivity-label">${settings.sensitivity}%</output><input type="range" id="sensitivity" min="10" max="100" value="${settings.sensitivity}" /></div><div class="setting-row"><label for="quality">Graphics quality</label><select id="quality"><option value="high">High — soft shadows</option><option value="low">Low — better performance</option></select></div><p class="settings-caption">Settings save automatically on this browser. A desktop keyboard and mouse are recommended for play.</p>`;
+  $('#modal-content').innerHTML = `<div class="eyebrow">MAKE YOURSELF COMFORTABLE</div><h2>Your game.<br>Your settings.</h2><div class="setting-row"><label for="volume">Sound volume</label><output id="volume-label">${settings.volume}%</output><input type="range" id="volume" min="0" max="100" value="${settings.volume}" /></div><div class="setting-row"><label for="sensitivity">Mouse sensitivity</label><output id="sensitivity-label">${settings.sensitivity}%</output><input type="range" id="sensitivity" min="10" max="100" value="${settings.sensitivity}" /></div><div class="setting-row"><label for="quality">Graphics quality</label><select id="quality"><option value="auto">Auto — adaptive performance</option><option value="high">High — soft shadows</option><option value="low">Low — better performance</option></select></div><p class="settings-caption">Settings save automatically on this browser. A desktop keyboard and mouse are recommended for play.</p>`;
   ($('#quality') as HTMLSelectElement).value = settings.quality;
   for (const key of ['volume', 'sensitivity'] as const) $(`#${key}`).addEventListener('input', e => { settings[key] = Number((e.target as HTMLInputElement).value); safeWrite(`on-${key}`, String(settings[key])); $(`#${key}-label`).textContent = `${settings[key]}%`; game?.configure(settings); syncSoundButton(); });
   $('#quality').addEventListener('change', e => { settings.quality = (e.target as HTMLSelectElement).value; safeWrite('on-quality', settings.quality); game?.configure(settings); });
@@ -130,7 +130,7 @@ function chooseMap(next: MapId) {
   $('#scene-index').textContent = `PLAYGROUND 0${index}`;
   $('#map-name').textContent = maps[map].label;
   $('#map-subtitle').textContent = maps[map].subtitle;
-  game?.preview(map);
+  ($('#arena-preview') as HTMLImageElement).src = `/arenas/${map}.webp`;
 }
 document.querySelectorAll<HTMLButtonElement>('[data-map]').forEach(button => button.addEventListener('click', () => chooseMap(button.dataset.map as MapId)));
 function sessionType(value: boolean) {
@@ -150,22 +150,16 @@ if (invite) { sessionType(false); ($('#room-code') as HTMLInputElement).value = 
 async function prepareGame() {
   const module = await import('./game/game');
   game = new module.Game($('#world'), {
-    onStatus: text => { $('#preview-loading').textContent = text; },
+    onStatus: text => {
+      $('#preview-loading').textContent = text;
+      if (starting) $('#launch-status').textContent = text === 'LOADING WASM CORE' ? 'Starting your match…' : 'Preparing your arena…';
+    },
     onPointerLock: locked => { if (playing) $('#pause').hidden = locked; },
     onDisconnect: reason => { if (playing) { leave(); $('#launch-status').textContent = reason; $('#launch-status').classList.add('error'); } },
   });
   game.configure(settings);
-  await game.preview(map);
   return game;
 }
-const ready = prepareGame().catch(error => {
-  $('#preview-loading').textContent = 'PREVIEW UNAVAILABLE';
-  $('#launch-status').textContent = `Could not start the 3D renderer: ${error.message}. Try a browser with WebGL 2 enabled.`;
-  $('#launch-status').classList.add('error');
-  throw error;
-});
-// A failed preview is also reported in the visible status above.
-ready.catch(() => undefined);
 $('#launch-button').addEventListener('click', async () => {
   if (starting) return;
   starting = true;
@@ -175,11 +169,14 @@ $('#launch-button').addEventListener('click', async () => {
   $('#launch-status').textContent = 'Loading the WebAssembly core and connecting to your match…';
   button.innerHTML = `<span>GETTING YOU IN</span><span class="spinner"></span>`;
   try {
-    const engine = await ready;
+    // Let the loading feedback paint before constructing any WebGL resources.
+    await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    const engine = game ?? await prepareGame();
     const name = ($('#nickname') as HTMLInputElement).value.trim() || 'Rookie';
     safeWrite('on-name', name);
     await engine.start({ name, mode, map, practice, room: ($('#room-code') as HTMLInputElement).value.trim().toUpperCase() || undefined });
     playing = true;
+    $('#arena-preview').hidden = true;
     $('#lobby').hidden = true;
     $('#menu-vignette').hidden = true;
     $('#game-hud').hidden = false;
@@ -188,6 +185,8 @@ $('#launch-button').addEventListener('click', async () => {
     $('#resume-button').innerHTML = `JUMP IN ${icon('arrow')}`;
     $('#pause-copy').textContent = 'Read a forehead, type its four digits, then press Enter. Move with WASD and look with your mouse. In team modes, your color appears beside your name.';
   } catch (error) {
+    game?.dispose();
+    game = undefined;
     $('#launch-status').textContent = (error as Error).message;
     $('#launch-status').classList.add('error');
   } finally {
@@ -199,7 +198,10 @@ $('#launch-button').addEventListener('click', async () => {
 $('#resume-button').addEventListener('click', () => { game?.capture(); $('#pause-title').innerHTML = 'Eyes back<br>in the game.'; $('#resume-button').innerHTML = `BACK TO IT ${icon('arrow')}`; });
 function leave() {
   playing = false;
-  game?.leave();
+  game?.dispose();
+  game = undefined;
+  $('#arena-preview').hidden = false;
+  $('#preview-loading').textContent = 'READY WHEN YOU ARE';
   $('#lobby').hidden = false;
   $('#menu-vignette').hidden = false;
   $('#game-hud').hidden = true;
@@ -207,7 +209,6 @@ function leave() {
   $('#scoreboard').hidden = true;
   $('#photo').hidden = true;
   $('#respawn-banner').hidden = true;
-  game?.preview(map);
   sessionType(practice);
 }
 $('#leave-button').addEventListener('click', leave);

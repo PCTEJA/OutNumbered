@@ -29,9 +29,10 @@ after(() => {
 });
 
 function watchResources(group: THREE.Object3D) {
-  const resources = new Set<THREE.BufferGeometry | THREE.Material | THREE.Texture>();
+  const resources = new Set<THREE.BufferGeometry | THREE.Material | THREE.Texture | THREE.InstancedMesh>();
   group.traverse(object => {
     if (!(object instanceof THREE.Mesh)) return;
+    if (object instanceof THREE.InstancedMesh) resources.add(object);
     resources.add(object.geometry);
     const materials = Array.isArray(object.material) ? object.material : [object.material];
     for (const material of materials) {
@@ -42,7 +43,9 @@ function watchResources(group: THREE.Object3D) {
   const counts = new Map<object, number>();
   for (const resource of resources) {
     counts.set(resource, 0);
-    resource.addEventListener('dispose', () => counts.set(resource, counts.get(resource)! + 1));
+    const onDispose = () => { counts.set(resource, counts.get(resource)! + 1); };
+    if (resource instanceof THREE.InstancedMesh) resource.addEventListener('dispose', onDispose);
+    else resource.addEventListener('dispose', onDispose);
   }
   return () => {
     assert.ok(resources.size > 0, 'the resource audit must observe live resources');
@@ -101,8 +104,28 @@ test('all three arenas generate finite geometry and keep static detail batched',
     for (const value of position.array) assert.ok(Number.isFinite(value), 'a rendered coordinate must be finite');
   });
   assert.ok(vertices > 30000, 'the test must exercise the detailed arenas');
-  assert.ok(meshes < 400, `architecture should remain batched, found ${meshes} mesh objects`);
+  assert.ok(meshes < 230, `architecture should remain batched, found ${meshes} mesh objects`);
   world.dispose();
+});
+
+test('disposing during shader preparation releases unpublished zone resources', async () => {
+  const scene = new THREE.Scene();
+  let release!: () => void;
+  let prepared!: () => void;
+  const waiting = new Promise<void>(resolve => { prepared = resolve; });
+  let checkDisposed!: () => void;
+  const world = new World(scene, async group => {
+    checkDisposed = watchResources(group);
+    prepared();
+    await new Promise<void>(resolve => { release = resolve; });
+  });
+  const loading = world.update(0, 0);
+  await waiting;
+  world.dispose();
+  release();
+  await loading;
+  checkDisposed();
+  assert.equal(scene.children.length, 0);
 });
 
 test('forehead numbers replace their texture and articulated characters release their resources', () => {

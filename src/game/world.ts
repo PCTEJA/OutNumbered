@@ -23,7 +23,7 @@ export class World {
   private lastX = 0;
   private lastZ = 0;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, private prepare?: (group: THREE.Group) => Promise<unknown>) {
     this.scene = scene;
     this.shell.name = 'always-loaded-landscape';
     scene.add(this.shell);
@@ -81,6 +81,14 @@ export class World {
     return { loaded: this.loaded.size, total: ZONES.length, zone: this.currentZone };
   }
 
+  setQuality(quality: string) {
+    const size = quality === 'high' ? 2048 : 1024;
+    if (this.sunlight.shadow.mapSize.x === size) return;
+    this.sunlight.shadow.mapSize.set(size, size);
+    this.sunlight.shadow.map?.dispose();
+    this.sunlight.shadow.map = null;
+  }
+
   async update(x: number, z: number, detailRadius = 43): Promise<void> {
     if (this.disposed) return;
     this.lastX = x;
@@ -91,9 +99,14 @@ export class World {
     for (const zone of ordered) {
       if (zone.distance < detailRadius || zone.id === ordered[0].id) {
         if (!this.loaded.has(zone.id) && !this.loading.has(zone.id)) {
-          const request = loaders[zone.id]().then(module => {
+          const request = loaders[zone.id]().then(async module => {
+            // Separate zone builds into tasks so input/paint can run between them.
+            await new Promise<void>(resolve => setTimeout(resolve, 0));
             if (this.disposed) return;
             const built = module.buildZone();
+            try { await this.prepare?.(built.group); }
+            catch (error) { built.dispose(); throw error; }
+            if (this.disposed) { built.dispose(); return; }
             this.loaded.set(zone.id, built);
             this.scene.add(built.group);
             this.proxies.get(zone.id)!.visible = false;

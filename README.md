@@ -75,7 +75,7 @@ Your own number is hidden. Correct guesses eliminate eligible opponents within r
 
 This is a **hybrid WASM web game**, not a whole engine compiled to one binary. AssemblyScript compiles movement, swept collision, range math, and stamina into `public/wasm/outnumbered.wasm`. Both browser prediction and the authoritative server use that core. TypeScript handles networking, menus, input, and procedural Three.js/WebGL 2 rendering.
 
-The page shell loads first. The renderer is a separate dynamic chunk, and the WASM binary is requested only when entering a match. Each detailed arena is a separate module imported as the player approaches; distant detail is disposed while inexpensive silhouettes and all collision bounds remain available. There is no giant scene download or external 3D asset dependency. See [the streaming design](docs/wasm-streaming.md).
+The lobby uses lightweight arena images and loads no 3D engine. The renderer and WASM binary are requested only when entering a match. Each detailed arena is a separate module imported as the player approaches; distant detail is disposed while inexpensive silhouettes and all collision bounds remain available. Auto graphics balances resolution and shadows against sustained frame times; High keeps sharper rendering and full-rate shadows. Geometry, textures and character detail are retained in every setting. See [the streaming design](docs/wasm-streaming.md).
 
 ```text
 assembly/                WebAssembly source

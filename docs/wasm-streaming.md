@@ -4,13 +4,17 @@ OutNumbered uses a small AssemblyScript WebAssembly simulation module alongside 
 
 ## What loads, and when
 
-1. Vite serves the HTML, CSS and application shell. `src/main.ts` then dynamically imports the game renderer for the animated lobby preview.
-2. The renderer creates a lightweight landscape and box silhouettes for all three arenas. It imports the selected arena's detailed scene module to build the preview.
+1. Vite serves the HTML, CSS and application shell with a preloaded WebP arena preview. The lobby does not import Three.js, construct WebGL resources, or run a render loop. Changing arenas switches the preview image.
+2. Clicking Play dynamically imports the renderer. It creates a lightweight landscape and box silhouettes for all three arenas, then loads the starting arena. Leaving a match disposes the engine and restores the image preview.
 3. Starting a match calls `loadCore()` in `src/game/wasm.ts`. This fetches `wasm/outnumbered.wasm` relative to Vite's configured base URL. `WebAssembly.instantiateStreaming()` compiles while downloading; a response-clone fallback supports hosts that send an incorrect WASM MIME type without a second download.
 4. As the player moves, `src/game/world.ts` imports nearby arena modules independently: campus, garden and museum. A zone loads within 43 metres of its centre; the nearest zone always loads. Its generated scene replaces the box silhouettes.
 5. Detailed scenes farther than 78 metres are disposed, releasing their geometry and materials and restoring the silhouettes. Returning reconstructs the scene from the module retained by the browser. This does not unload downloaded JavaScript from the module cache.
 
 The separate load and unload distances prevent repeated rebuilding near a boundary. Vite emits actual arena JavaScript chunks; these are not simulated loading delays. The arena modules generate buildings, props, trees and textures at runtime, so this version has no large external model bundles to stream. Navigation streams scene detail, while the small shared collision layout is present from match start. An unloaded arena therefore remains solid.
+
+Scene shaders are prepared asynchronously before new detail is published. Static scenery shares palette materials within each independently disposable zone and freezes unchanged transforms. Characters batch colors per vertex within articulated joints, retaining geometry and surface roughness. Equipment is prepared between loading-screen paints and reused during the match.
+
+Auto graphics caps the rendered pixel count at two million, caps device pixel ratio at 1.25, and adjusts resolution between 80% and 100% after sustained frame-time measurements. It uses a 1024-square shadow map updated at most 30 times per second. High uses up to four million pixels, a 1.6 pixel-ratio cap, and 2048-square shadows updated every frame. All modes keep the same characters, textures, arena geometry and native-resolution HTML HUD. Hidden tabs suspend rendering; returning resumes without treating the background interval as slow rendering.
 
 ## Source and build
 
