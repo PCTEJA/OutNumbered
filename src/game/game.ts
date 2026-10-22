@@ -143,6 +143,11 @@ export class Game {
       if (e.button === 2 && this.controlling) { e.preventDefault(); this.setZoom(!this.zoomed); }
     }, { signal });
     document.addEventListener('mouseup', () => { this.dragging = false; }, { signal });
+    this.renderer.domElement.addEventListener('wheel', e => {
+      if (!this.playing || !this.controlling || this.touch.enabled || document.querySelector('dialog[open]') || e.ctrlKey || e.deltaY === 0) return;
+      e.preventDefault();
+      this.action('KeyQ', '', e.deltaY > 0 ? 1 : -1);
+    }, { signal, passive: false });
     this.renderer.domElement.addEventListener('contextmenu', e => e.preventDefault(), { signal });
     document.addEventListener('pointerlockchange', () => {
       if (document.pointerLockElement === this.renderer.domElement && !this.controlling) {
@@ -332,7 +337,7 @@ export class Game {
     if (e.code === 'Tab') { if (this.state) this.drawScoreboard(this.state); $('scoreboard').hidden = false; return; }
     if (!e.repeat) this.action(e.code, e.key);
   }
-  private action(code: string, key = '') {
+  private action(code: string, key = '', grenadeDirection: 1 | -1 = 1) {
     if (!this.playing || !this.controlling || document.querySelector('dialog[open]')) return;
     if (code === 'Tab') { if (this.state) this.drawScoreboard(this.state); $('scoreboard').hidden = !$('scoreboard').hidden; return; }
     if (this.state?.ended || !this.state?.players.find(p => p.id === this.id)?.alive) return;
@@ -345,7 +350,8 @@ export class Game {
     if (code === 'KeyF') this.setZoom(!this.zoomed);
     if (code === 'KeyE') this.takePhoto();
     if (code === 'KeyQ') {
-      this.gadget = (['flash', 'smoke', 'distract'] as GadgetKind[])[(['flash', 'smoke', 'distract'].indexOf(this.gadget) + 1) % 3];
+      const grenades: GadgetKind[] = ['flash', 'smoke', 'distract'];
+      this.gadget = grenades[(grenades.indexOf(this.gadget) + grenadeDirection + grenades.length) % grenades.length];
       this.changeEquipment(this.zoomed ? 'binoculars' : this.gadget);
       $('grenade-name').textContent = this.gadget.toUpperCase();
       this.touch.root.querySelector('[data-code="KeyQ"]')!.textContent = this.gadget.toUpperCase();
