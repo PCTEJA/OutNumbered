@@ -1,0 +1,22 @@
+{
+  "task_uuid": "6d65f614-bde0-46ec-98eb-f242f6ad30ee",
+  "task_type": "mesh-generate",
+  "model": "pro",
+  "status": "COMPLETED",
+  "created_at": 1792708360,
+  "completed_at": 1792708532,
+  "result": [
+    "models/457c332d-680c-4a6c-8161-f3f6fcc98ca0.glb"
+  ],
+  "metadata": [
+    {
+      "downloads": [
+        {
+          "asset_path": "models/457c332d-680c-4a6c-8161-f3f6fcc98ca0.glb",
+          "download_url": "https://oss-cn-1.v2fun.art/DATA/v2fun/models/457c332d-680c-4a6c-8161-f3f6fcc98ca0.glb?x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-date=20261022T223532Z&x-oss-expires=3599&x-oss-credential=LTAI5tD4QNrk5fK6aMQneNNU%2F20261022%2Fcn-beijing%2Foss%2Faliyun_v4_request&x-oss-signature=ca1da9ece88387eb35fe7af1b690975efb03cb1582e5416f7894b634215acbca",
+          "download_expires_at": 1792712132
+        }
+      ]
+    }
+  ]
+}

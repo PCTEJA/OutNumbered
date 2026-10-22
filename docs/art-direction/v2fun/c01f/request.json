@@ -1,0 +1,10 @@
+{
+  "model": "pro",
+  "options": {
+    "block": false
+  },
+  "with_texture": true,
+  "prompt": "ONE full-body premium stylized-realistic adult female game character for OutNumbered, C01F Female Varsity. Warm medium skin, short swept dark brown quiff fully clearing forehead, refined softly defined jaw, calm focused mature feminine face, realistic adult athletic female proportions, natural balanced anatomy. Tailored muted navy-blue varsity jacket (#304e70) with cream sleeves, refined ribbed striped collar and cuffs, snap fasteners and welt pockets; charcoal tapered trousers; separate cream and slate low-top sneakers with modeled soles and laces. Neutral relaxed A-pose arms 30 degrees from body, straight unlocked knees, feet apart, hands open with FIVE anatomically separate fingers including opposed thumbs on each hand. Coherent face with eyelids, eyes, shaped nose, ears and closed relaxed mouth. Clean sculpted hair volume. Thin blank cream rectangular forehead number panel on discreet charcoal headband, FRONT ONLY, no digits or writing, hair clears panel. Target adult height 1.8 metres and panel 0.43m wide by 0.16m high centered 1.67m from ground. One character only, no ground plane, no pedestal, no scenery, no props, no weapons, no labels, no multiple views. Clean complete 3D geometry all around, natural garment thickness, separation between limbs, fingers and clothing, animation-friendly joint topology. Subtle physically based cloth, skin, rubber and hair materials, no baked directional lighting or shadows. Metre scale Y up facing positive Z, origin between feet. Separate body eyes hair upper cloth lower cloth shoes and rigid blank forehead panel where possible. High-quality neutral character model for close inspection.",
+  "pbr_texture": true,
+  "hd_texture": false
+}

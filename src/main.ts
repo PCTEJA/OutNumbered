@@ -15,7 +15,7 @@ let game: Game | undefined;
 let starting = false;
 let playing = false;
 let practice = true;
-const settings = { volume: Number(safeRead('on-volume', '55')), sensitivity: Number(safeRead('on-sensitivity', '50')), quality: safeRead('on-quality', 'auto') };
+const settings = { volume: Number(safeRead('on-volume', '55')), sensitivity: Number(safeRead('on-sensitivity', '50')), quality: safeRead('on-quality', 'auto'), controls: safeRead('on-controls', 'auto') };
 const maps = {
   campus: { name: 'Schoolyard', subtitle: 'Sunlit courts. Close quarters.', label: 'THE SCHOOLYARD' },
   garden: { name: 'Garden Party', subtitle: 'Green hideouts. Long sightlines.', label: 'GARDEN PARTY' },
@@ -110,8 +110,10 @@ $('#how-button').addEventListener('click', () => {
 });
 
 function showSettings() {
-  $('#modal-content').innerHTML = `<div class="eyebrow">MAKE YOURSELF COMFORTABLE</div><h2>Your game.<br>Your settings.</h2><div class="setting-row"><label for="volume">Sound volume</label><output id="volume-label">${settings.volume}%</output><input type="range" id="volume" min="0" max="100" value="${settings.volume}" /></div><div class="setting-row"><label for="sensitivity">Mouse sensitivity</label><output id="sensitivity-label">${settings.sensitivity}%</output><input type="range" id="sensitivity" min="10" max="100" value="${settings.sensitivity}" /></div><div class="setting-row"><label for="quality">Graphics quality</label><select id="quality"><option value="auto">Auto — adaptive performance</option><option value="high">High — soft shadows</option><option value="low">Low — better performance</option></select></div><p class="settings-caption">Settings save automatically on this browser. A desktop keyboard and mouse are recommended for play.</p>`;
+  $('#modal-content').innerHTML = `<div class="eyebrow">MAKE YOURSELF COMFORTABLE</div><h2>Your game.<br>Your settings.</h2><div class="setting-row"><label for="volume">Sound volume</label><output id="volume-label">${settings.volume}%</output><input type="range" id="volume" min="0" max="100" value="${settings.volume}" /></div><div class="setting-row"><label for="sensitivity">Look sensitivity</label><output id="sensitivity-label">${settings.sensitivity}%</output><input type="range" id="sensitivity" min="10" max="100" value="${settings.sensitivity}" /></div><div class="setting-row"><label for="quality">Graphics quality</label><select id="quality"><option value="auto">Auto — adaptive performance</option><option value="high">High — soft shadows</option><option value="low">Low — better performance</option></select></div><div class="setting-row"><label for="controls">Controls</label><select id="controls"><option value="auto">Auto — detect touch input</option><option value="touch">Touch — on-screen controls</option><option value="desktop">Keyboard and mouse</option></select></div><p class="settings-caption">Settings save automatically. On touch screens, use the left stick to move and swipe the right side to look. Tap 123 to enter a number. Landscape gives you more room.</p>`;
   ($('#quality') as HTMLSelectElement).value = settings.quality;
+  ($('#controls') as HTMLSelectElement).value = settings.controls;
+  $('#controls').addEventListener('change', e => { settings.controls = (e.target as HTMLSelectElement).value; safeWrite('on-controls', settings.controls); game?.configure(settings); });
   for (const key of ['volume', 'sensitivity'] as const) $(`#${key}`).addEventListener('input', e => { settings[key] = Number((e.target as HTMLInputElement).value); safeWrite(`on-${key}`, String(settings[key])); $(`#${key}-label`).textContent = `${settings[key]}%`; game?.configure(settings); syncSoundButton(); });
   $('#quality').addEventListener('change', e => { settings.quality = (e.target as HTMLSelectElement).value; safeWrite('on-quality', settings.quality); game?.configure(settings); });
   modal.showModal();
@@ -183,7 +185,8 @@ $('#launch-button').addEventListener('click', async () => {
     $('#pause').hidden = false;
     $('#pause-title').innerHTML = 'Ready or not.<br>Here you count.';
     $('#resume-button').innerHTML = `JUMP IN ${icon('arrow')}`;
-    $('#pause-copy').textContent = 'Read a forehead, type its four digits, then press Enter. Move with WASD, press Space to jump, and look with your mouse. In team modes, your color appears beside your name.';
+    $('#capture-note').textContent = engine.touchEnabled ? 'Left stick to move · Swipe right side to look · Landscape recommended' : 'Click to capture your mouse · Esc to release';
+    $('#pause-copy').textContent = engine.touchEnabled ? 'Read an opponent’s number, tap 123, enter four digits, then tap TAG. Sprint toggles running; Zoom, Photo, Switch, Throw and Jump are at your right thumb.' : 'Read a forehead, type its four digits, then press Enter. Move with WASD, press Space to jump, and look with your mouse. In team modes, your color appears beside your name.';
   } catch (error) {
     game?.dispose();
     game = undefined;
@@ -218,4 +221,3 @@ $('#share-room').addEventListener('click', async () => {
   catch { game.toast(`Room code: ${game.room}`); }
 });
 window.addEventListener('beforeunload', () => game?.dispose());
-

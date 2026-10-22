@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { animateFlag, createFlagCloth, createFlagHardware } from './flag';
 import { MotionBuffer } from './motion';
 import { Jump } from './jump';
+import { TouchControls } from './touch-controls';
 import { World } from './world';
 import { createAvatar, animateAvatar, updateAvatarNumber, disposeAvatar, createEquipment } from './avatar';
 import { loadCore, type GameCore } from './wasm';
@@ -81,6 +82,8 @@ export class Game {
   private roundShown = false;
   private firstState = true;
   private jump = new Jump();
+  private touch: TouchControls;
+  get touchEnabled() { return this.touch.enabled; }
 
   constructor(private host: HTMLElement, private callbacks: Callbacks) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -105,7 +108,18 @@ export class Game {
     this.camera.add(this.equipment);
     this.equipment.position.set(.34, -.42, -.62);
     const signal = this.abort.signal;
-    window.addEventListener('resize', () => this.resize(), { signal });
+    this.touch = new TouchControls({
+      action: (code, key) => this.action(code, key),
+      look: (x, y) => {
+        if (!this.controlling) return;
+        const sensitivity = this.sensitivity * (this.zoomed ? .37 : 1);
+        this.yaw -= x * sensitivity;
+        this.pitch = clamp(this.pitch - y * sensitivity, -1.35, 1.35);
+      },
+      pause: () => this.pause(),
+      changed: () => { if (this.controlling) this.pause(); },
+    });
+    window.addEventListener('resize', () => { this.touch.reset(); this.sendInput(); this.resize(); }, { signal });
     document.addEventListener('keydown', e => this.keyDown(e), { signal });
     document.addEventListener('keyup', e => { this.keys.delete(e.code); if (/^(Key[WASD]|ShiftLeft|ShiftRight)$/.test(e.code)) this.sendInput(); if (e.code === 'Tab') $('scoreboard').hidden = true; }, { signal });
     document.addEventListener('mousemove', e => {
@@ -114,7 +128,7 @@ export class Game {
       this.pitch = clamp(this.pitch - e.movementY * this.sensitivity * (this.zoomed ? .37 : 1), -1.35, 1.35);
     }, { signal });
     this.renderer.domElement.addEventListener('mousedown', e => {
-      if (!this.playing) return;
+      if (!this.playing || this.touch.enabled) return;
       if (!this.controlling) this.capture();
       this.dragging = true;
       if (e.button === 2 && this.controlling) { e.preventDefault(); this.setZoom(!this.zoomed); }
@@ -123,12 +137,13 @@ export class Game {
     this.renderer.domElement.addEventListener('contextmenu', e => e.preventDefault(), { signal });
     document.addEventListener('pointerlockchange', () => {
       this.controlling = document.pointerLockElement === this.renderer.domElement;
+      this.touch.setActive(this.controlling);
       if (!this.controlling) { this.keys.clear(); this.jump.reset(); this.sendInput(); }
       this.callbacks.onPointerLock(this.controlling);
     }, { signal });
-    window.addEventListener('blur', () => { this.keys.clear(); this.jump.reset(); this.sendInput(); }, { signal });
+    window.addEventListener('blur', () => this.pause(), { signal });
     document.addEventListener('visibilitychange', () => {
-      this.keys.clear(); this.jump.reset(); this.sendInput();
+      if (document.hidden) this.pause();
       cancelAnimationFrame(this.frameId);
       this.resolution.reset();
       if (!document.hidden && this.playing) {
@@ -138,7 +153,8 @@ export class Game {
     }, { signal });
   }
 
-  configure(settings: { volume: number; sensitivity: number; quality: string }) {
+  configure(settings: { volume: number; sensitivity: number; quality: string; controls?: string }) {
+    this.touch.configure(settings.controls ?? 'auto');
     this.audio.volume = clamp(settings.volume / 100, 0, 1);
     this.sensitivity = .0005 + settings.sensitivity * .000035;
     const quality = ['auto', 'high', 'low'].includes(settings.quality) ? settings.quality : 'auto';
@@ -247,10 +263,24 @@ export class Game {
     if (this.state?.ended) { this.toast('Round complete. Leave the match to start another.'); return; }
     void this.audio.unlock().catch(() => undefined);
     this.renderer.domElement.focus();
+    if (this.touch.enabled) {
+      this.controlling = true;
+      this.touch.setActive(true);
+      this.callbacks.onPointerLock(true);
+      return;
+    }
     try {
       const result = this.renderer.domElement.requestPointerLock();
       if (result) result.catch(() => this.enableDragLook());
     } catch { this.enableDragLook(); }
+  }
+  private pause() {
+    this.controlling = false;
+    this.dragging = false;
+    this.keys.clear(); this.jump.reset(); this.touch.setActive(false);
+    this.sendInput();
+    if (document.pointerLockElement === this.renderer.domElement) document.exitPointerLock();
+    if (this.playing) this.callbacks.onPointerLock(false);
   }
   private enableDragLook() {
     this.controlling = true;
@@ -262,40 +292,46 @@ export class Game {
   private send(message: ClientMessage) { if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message)); }
   private input() {
     const live = this.controlling && this.state?.players.find(p => p.id === this.id)?.alive && !this.state.ended;
-    const forward = live ? Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')) : 0;
-    const strafe = live ? Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')) : 0;
-    return { forward, strafe, sprint: !!live && (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) && this.stamina > 0 };
+    const forward = live ? clamp(Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')) + this.touch.forward, -1, 1) : 0;
+    const strafe = live ? clamp(Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')) + this.touch.strafe, -1, 1) : 0;
+    return { forward, strafe, sprint: !!live && (this.touch.sprint || this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) && this.stamina > 0 };
   }
   private sendInput() { if (this.playing) this.send({ type: 'input', ...this.input(), yaw: this.yaw }); }
   private keyDown(e: KeyboardEvent) {
     if (!this.playing || document.querySelector('dialog[open]')) return;
-    if (e.code === 'Escape' && !document.pointerLockElement && this.controlling) { this.controlling = false; this.keys.clear(); this.jump.reset(); this.sendInput(); this.callbacks.onPointerLock(false); return; }
+    if (e.code === 'Escape' && !document.pointerLockElement && this.controlling) { this.pause(); return; }
     if (!this.controlling) return;
     if (['Tab', 'Space', 'Backspace', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code) || /^Digit|^Numpad/.test(e.code)) e.preventDefault();
     this.keys.add(e.code);
     if (!e.repeat && /^(Key[WASD]|ShiftLeft|ShiftRight)$/.test(e.code)) this.sendInput();
     if (e.code === 'Tab') { if (this.state) this.drawScoreboard(this.state); $('scoreboard').hidden = false; return; }
-    if (e.repeat || this.state?.ended || !this.state?.players.find(p => p.id === this.id)?.alive) return;
-    if (/^[0-9]$/.test(e.key)) { if (this.digits.length < 4) { this.digits += e.key; this.drawDigits(); this.audio.play('key'); } return; }
-    if (e.code === 'Backspace') { this.digits = this.digits.slice(0, -1); this.drawDigits(); }
-    if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+    if (!e.repeat) this.action(e.code, e.key);
+  }
+  private action(code: string, key = '') {
+    if (!this.playing || !this.controlling || document.querySelector('dialog[open]')) return;
+    if (code === 'Tab') { if (this.state) this.drawScoreboard(this.state); $('scoreboard').hidden = !$('scoreboard').hidden; return; }
+    if (this.state?.ended || !this.state?.players.find(p => p.id === this.id)?.alive) return;
+    if (/^[0-9]$/.test(key)) { if (this.digits.length < 4) { this.digits += key; this.drawDigits(); this.audio.play('key'); } return; }
+    if (code === 'Backspace') { this.digits = this.digits.slice(0, -1); this.drawDigits(); }
+    if (code === 'Enter' || code === 'NumpadEnter') {
       if (this.digits.length === 4) { this.sendInput(); this.send({ type: 'submit', number: this.digits }); this.digits = ''; this.drawDigits(); }
-      else this.toast('Four digits. Then Enter.');
+      else this.toast(this.touch.enabled ? 'Enter four digits, then tap TAG.' : 'Four digits. Then Enter.');
     }
-    if (e.code === 'KeyF') this.setZoom(!this.zoomed);
-    if (e.code === 'KeyE') this.takePhoto();
-    if (e.code === 'KeyQ') {
+    if (code === 'KeyF') this.setZoom(!this.zoomed);
+    if (code === 'KeyE') this.takePhoto();
+    if (code === 'KeyQ') {
       this.gadget = (['flash', 'smoke', 'distract'] as GadgetKind[])[(['flash', 'smoke', 'distract'].indexOf(this.gadget) + 1) % 3];
       this.changeEquipment(this.zoomed ? 'binoculars' : this.gadget);
       $('grenade-name').textContent = this.gadget.toUpperCase();
-      this.toast(`${this.gadget.toUpperCase()} GRENADE equipped. Press G to throw.`);
+      this.touch.root.querySelector('[data-code="KeyQ"]')!.textContent = this.gadget.toUpperCase();
+      this.toast(`${this.gadget.toUpperCase()} GRENADE equipped. ${this.touch.enabled ? 'Tap Throw.' : 'Press G to throw.'}`);
     }
-    if (e.code === 'KeyG') {
+    if (code === 'KeyG') {
       const cooldown = this.state.cooldowns[this.gadget];
       if (cooldown > 0) this.toast(`${this.gadget.toUpperCase()} ready in ${Math.ceil(cooldown)}s`);
       else { this.sendInput(); this.send({ type: 'gadget', kind: this.gadget }); this.changeEquipment(this.gadget); this.throwUntil = performance.now() + 450; this.audio.play('throw'); }
     }
-    if (e.code === 'Space') this.jump.press(performance.now());
+    if (code === 'Space') this.jump.press(performance.now());
   }
 
   private drawDigits() {
@@ -314,6 +350,7 @@ export class Game {
   }
   private setZoom(value: boolean) {
     this.zoomed = value;
+    this.touch.root.querySelector('[data-code="KeyF"]')!.setAttribute('aria-pressed', String(value));
     if (this.playing) this.changeEquipment('binoculars');
     $('binocular-mask').hidden = !value;
     $('tool-binoculars').classList.toggle('active', value);
@@ -371,7 +408,7 @@ export class Game {
       if (Math.abs(self.stamina - this.stamina) > 3) this.stamina = self.stamina;
     }
     this.respawning = !self.alive;
-    if (this.respawning) this.jump.reset();
+    if (this.respawning) { this.jump.reset(); this.touch.reset(); }
     $('respawn-banner').hidden = self.alive;
     $('hud-player-name').textContent = `${self.name}${state.mode === 'deathmatch' ? '' : ` · ${self.team.toUpperCase()}`}`;
     $('hud-mode').textContent = modeNames[state.mode];
@@ -405,10 +442,7 @@ export class Game {
     if (state.mode === 'ctf') this.syncFlags(state);
     if (state.ended && !this.roundShown) {
       this.roundShown = true;
-      this.keys.clear(); this.jump.reset();
-      document.exitPointerLock();
-      this.controlling = false;
-      this.callbacks.onPointerLock(false);
+      this.pause();
       $('pause-title').textContent = 'That’s a wrap.';
       const winner = state.mode === 'deathmatch' ? [...state.players].sort((a, b) => b.score - a.score)[0]?.name : state.scores.red === state.scores.blue ? 'Both teams' : state.scores.red > state.scores.blue ? 'Red team' : 'Blue team';
       $('pause-copy').textContent = `${winner} ${state.scores.red === state.scores.blue && state.mode !== 'deathmatch' ? 'tied!' : 'takes the match!'} You scored ${self.score} ${state.mode === 'ctf' ? 'points' : 'eliminations'}. Leave the match to start another round.`;
@@ -646,6 +680,7 @@ export class Game {
     cancelAnimationFrame(this.frameId);
     this.playing = false;
     this.controlling = false;
+    this.touch.setActive(false);
     this.keys.clear(); this.jump.reset();
     this.socket?.close();
     this.socket = undefined;
@@ -664,6 +699,7 @@ export class Game {
     this.leave();
     cancelAnimationFrame(this.frameId);
     this.abort.abort();
+    this.touch.dispose();
     this.equipmentCache.forEach(equipment => disposeAvatar(equipment));
     this.equipmentCache.clear();
     for (const particle of this.particles) { particle.mesh.removeFromParent(); particle.mesh.geometry.dispose(); (particle.mesh.material as THREE.Material).dispose(); }
