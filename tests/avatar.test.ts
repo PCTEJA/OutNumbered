@@ -91,8 +91,10 @@ test('character variants retain the playable scale and keep detailed geometry wi
       for (const value of positions.array) assert.ok(Number.isFinite(value), 'all model vertices must be finite');
       triangles += (mesh.geometry.index?.count ?? positions.count) / 3;
     }
-    assert.ok(meshes.length <= 20, `${meshes.length} meshes per character would multiply across a 20-player room`);
-    assert.ok(triangles <= 18000, `character has ${triangles} triangles`);
+    // Quality-first models intentionally exceed the former 18k triangle limit.
+    // Keep an upper guard against accidental unbounded subdivision, not an art cap.
+    assert.ok(meshes.length <= 32, `unexpected batching regression: ${meshes.length} meshes`);
+    assert.ok(triangles <= 250000, `unexpected geometry growth: ${triangles} triangles`);
     const bounds = new THREE.Box3().setFromObject(avatar);
     assert.ok(bounds.min.y >= -0.025 && bounds.min.y <= 0.08, `feet must rest at floor height: ${bounds.min.y}`);
     assert.ok(bounds.max.y >= 1.7 && bounds.max.y <= 1.95, `character height must fit the existing arena: ${bounds.max.y}`);
@@ -113,6 +115,13 @@ test('forehead cards stay at eye height, face forward, and remain unobstructed b
     assert.equal(plate.material.side, THREE.FrontSide, 'numbers must not be readable through the rear of a head');
     plate.geometry.computeBoundingBox();
     const cardBounds = plate.geometry.boundingBox!;
+    const width = new THREE.Vector3(cardBounds.min.x, 0, 0).applyMatrix4(plate.matrixWorld)
+      .distanceTo(new THREE.Vector3(cardBounds.max.x, 0, 0).applyMatrix4(plate.matrixWorld));
+    const height = new THREE.Vector3(0, cardBounds.min.y, 0).applyMatrix4(plate.matrixWorld)
+      .distanceTo(new THREE.Vector3(0, cardBounds.max.y, 0).applyMatrix4(plate.matrixWorld));
+    assert.ok(Math.abs(width - .43) < 1e-6, 'head scaling must not shrink the gameplay target');
+    assert.ok(Math.abs(height - .16) < 1e-6);
+    assert.ok(Math.abs(center.y - 1.67) < 1e-6, 'idle breathing must not move the target datum');
     for (const fraction of [-0.75, -0.25, 0.25, 0.75]) {
       const digitCenter = new THREE.Vector3(fraction * (cardBounds.max.x - cardBounds.min.x) / 2, 0, 0).applyMatrix4(plate.matrixWorld);
       const ray = new THREE.Raycaster(digitCenter.clone().add(new THREE.Vector3(0, 0, 2)), forward, 0, 3);

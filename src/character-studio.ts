@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createAvatar, animateAvatar, createEquipment, disposeAvatar } from './game/avatar';
 import './character-studio.css';
 
-type View = 'body' | 'face' | 'hands';
+type View = 'body' | 'face' | 'hands' | 'portrait';
 type Team = 'red' | 'blue';
 const app = document.querySelector<HTMLDivElement>('#studio')!;
 app.innerHTML = `
@@ -28,10 +28,10 @@ app.innerHTML = `
       <fieldset class="control-group" data-character-setting>
         <legend>Character</legend>
         <div class="variants" data-control="number">
-          <button data-value="2634" aria-pressed="true"><span class="variant-dot" style="--swatch:#dcaa87"></span>2634</button>
-          <button data-value="2928" aria-pressed="false"><span class="variant-dot" style="--swatch:#b98466"></span>2928</button>
-          <button data-value="4875" aria-pressed="false"><span class="variant-dot" style="--swatch:#916347"></span>4875</button>
-          <button data-value="3141" aria-pressed="false"><span class="variant-dot" style="--swatch:#d5a185"></span>3141</button>
+          <button data-value="2634" aria-pressed="true"><span class="variant-dot" style="--swatch:#dcaa87"></span>Swept polo</button>
+          <button data-value="2928" aria-pressed="false"><span class="variant-dot" style="--swatch:#b98466"></span>Varsity</button>
+          <button data-value="4875" aria-pressed="false"><span class="variant-dot" style="--swatch:#916347"></span>Curly hoodie</button>
+          <button data-value="3141" aria-pressed="false"><span class="variant-dot" style="--swatch:#d5a185"></span>Ponytail polo</button>
         </div>
       </fieldset>
       <fieldset class="control-group" data-character-setting>
@@ -65,6 +65,14 @@ app.innerHTML = `
         </div>
         <p id="mesh-budget" class="studio-note"></p>
       </fieldset>
+      <fieldset class="control-group" data-character-setting>
+        <legend>Turntable</legend>
+        <div class="segmented" data-control="angle">
+          <button data-value="0" aria-pressed="true">Front</button>
+          <button data-value="90" aria-pressed="false">Side</button>
+          <button data-value="180" aria-pressed="false">Back</button>
+        </div>
+      </fieldset>
       <p class="studio-note">The same characters and equipment you’ll see in the game, ready to explore from every angle.</p>
     </aside>
     <section class="studio-viewport" aria-label="Interactive 3D character preview">
@@ -75,6 +83,7 @@ app.innerHTML = `
         <button data-value="body" aria-pressed="true">Full body</button>
         <button data-value="face" aria-pressed="false">Face</button>
         <button data-value="hands" aria-pressed="false">Hands</button>
+        <button data-value="portrait" aria-pressed="false">Portrait</button>
       </div>
       <p class="interaction-hint">Drag to rotate <span>·</span> Scroll or pinch to zoom</p>
     </section>
@@ -88,7 +97,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 1.0;
 renderer.domElement.setAttribute('aria-label', 'Drag to rotate the character. Use the buttons below for close-up views.');
 renderer.domElement.setAttribute('role', 'img');
 stage.appendChild(renderer.domElement);
@@ -105,8 +114,8 @@ controls.minDistance = 0.35;
 controls.maxDistance = 7;
 controls.maxPolarAngle = Math.PI * 0.56;
 
-scene.add(new THREE.HemisphereLight(0xfff8eb, 0x7d9388, 2.15));
-const key = new THREE.DirectionalLight(0xffefd8, 3.3);
+scene.add(new THREE.HemisphereLight(0xfff8eb, 0x7d9388, 1.25));
+const key = new THREE.DirectionalLight(0xffefd8, 2.6);
 key.position.set(-3, 5, 4);
 key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048);
@@ -118,7 +127,7 @@ key.shadow.normalBias = 0.015;
 key.shadow.bias = -0.0001;
 key.shadow.radius = 5;
 scene.add(key);
-const rim = new THREE.DirectionalLight(0xe4eeff, 2.3);
+const rim = new THREE.DirectionalLight(0xe4eeff, 1.6);
 rim.position.set(3, 3, -3);
 scene.add(rim);
 const fill = new THREE.DirectionalLight(0xfff9ef, 0.8);
@@ -146,6 +155,7 @@ let equipment = 'binoculars';
 let mode = 'character';
 let wireframe = false;
 let view: View = 'body';
+let turntableAngle = 0;
 let subject = createAvatar(number, team);
 scene.add(subject);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -160,6 +170,8 @@ function setPressed(control: string, value: string) {
 }
 
 function frame(instant = false) {
+  const numberSocket = subject.getObjectByName('NumberSocket');
+  if (numberSocket) numberSocket.visible = view !== 'portrait';
   subject.updateMatrixWorld(true);
   if (mode === 'equipment') {
     // Equipment points along -Z; the +Z camera shows the player's side of the grip.
@@ -169,7 +181,7 @@ function frame(instant = false) {
     const distance = Math.max(size.x / camera.aspect, size.y, size.z) * (view === 'hands' ? 2.35 : 2.9);
     targetLook.copy(centre);
     targetPosition.copy(centre).add(new THREE.Vector3(0.6, 0.28, 1).normalize().multiplyScalar(distance));
-  } else if (view === 'face') {
+  } else if (view === 'face' || view === 'portrait') {
     const head = subject.userData.head as THREE.Object3D | undefined;
     targetLook.copy(head ? head.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3(0, 1.55, 0));
     targetLook.y += 0.02;
@@ -195,7 +207,7 @@ function frame(instant = false) {
 
 function updateLabels() {
   app.querySelector('#subject-title')!.textContent = mode === 'character' ? `Character ${number}` : equipment === 'flash' ? 'Flash canister' : equipment === 'smoke' ? 'Smoke canister' : equipment[0].toUpperCase() + equipment.slice(1);
-  app.querySelector('#subject-caption')!.textContent = mode === 'character' ? `${team === 'blue' ? 'Blue' : 'Red'} team · ${walking ? 'Walking' : 'Standing'}` : 'Hands & equipment · Grip detail';
+  app.querySelector('#subject-caption')!.textContent = mode === 'character' ? `${team === 'blue' ? 'Blue' : 'Red'} team · ${view === 'portrait' ? 'Portrait · number hidden for inspection' : walking ? 'Walking' : 'Standing'}` : 'Hands & equipment · Grip detail';
 }
 
 function inspectSubject() {
@@ -214,6 +226,7 @@ inspectSubject();
 function rebuild() {
   disposeAvatar(subject);
   subject = mode === 'character' ? createAvatar(number, team) : createEquipment(equipment, true);
+  if (mode === 'character') subject.rotation.y = turntableAngle;
   if (mode === 'equipment') {
     subject.position.y = 1.1;
     subject.traverse(object => { if (object instanceof THREE.Mesh) object.castShadow = true; });
@@ -225,6 +238,7 @@ function rebuild() {
   app.querySelectorAll<HTMLElement>('[data-equipment-setting]').forEach(el => { el.hidden = mode !== 'equipment'; });
   const faceButton = app.querySelector<HTMLButtonElement>('[data-control="view"] [data-value="face"]')!;
   faceButton.hidden = mode === 'equipment';
+  app.querySelector<HTMLButtonElement>('[data-control="view"] [data-value="portrait"]')!.hidden = mode === 'equipment';
   app.querySelector('[data-control="view"] [data-value="body"]')!.textContent = mode === 'equipment' ? 'Complete view' : 'Full body';
   updateLabels();
   frame();
@@ -235,10 +249,14 @@ app.querySelectorAll<HTMLButtonElement>('[data-control] button').forEach(button 
     const control = button.closest<HTMLElement>('[data-control]')!.dataset.control!;
     const value = button.dataset.value!;
     setPressed(control, value);
-    if (control === 'debug') {
+    if (control === 'angle') {
+      turntableAngle = Number(value) * Math.PI / 180;
+      subject.rotation.y = turntableAngle;
+    } else if (control === 'debug') {
       wireframe = value === 'wire'; inspectSubject();
     } else if (control === 'view') {
       view = value as View;
+      updateLabels();
       if (view === 'hands' && mode === 'character') {
         walking = false;
         setPressed('motion', 'idle');

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { animateFlag, createFlagCloth } from './flag';
+import { animateFlag, createFlagCloth, createFlagHardware } from './flag';
 import { MotionBuffer } from './motion';
 import { World } from './world';
 import { createAvatar, animateAvatar, updateAvatarNumber, disposeAvatar, createEquipment } from './avatar';
@@ -490,9 +490,9 @@ export class Game {
       let flag = this.flags.get(team);
       if (!flag) {
         const group = new THREE.Group();
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(.035, .035, 2.7, 8), new THREE.MeshStandardMaterial({ color: 0xe1d9bc })); pole.position.y = 1.35; group.add(pole);
+        group.add(createFlagHardware());
         const cloth = createFlagCloth(team); group.add(cloth);
-        const base = new THREE.Mesh(new THREE.CylinderGeometry(.6, .7, .14, 20), new THREE.MeshStandardMaterial({ color: team === 'red' ? 0xe95746 : 0x528bd7 })); base.position.y = .07; group.add(base);
+
         const label = document.createElement('div'); label.className = 'flag-marker'; label.style.borderColor = team === 'red' ? '#e85f54' : '#5894d3'; $('game-hud').append(label);
         this.scene.add(group);
         flag = { group, label }; this.flags.set(team, flag);
