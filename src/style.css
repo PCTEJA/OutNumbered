@@ -59,7 +59,8 @@ html:fullscreen { background:#163c3d; }
 .touch-layout .match-score { top:max(12px,env(safe-area-inset-top)); }
 .touch-layout .photo { top:100px; right:12px; width:140px; }
 .touch-layout .photo>img { height:90px; }
-.touch-layout .scoreboard { z-index:2; pointer-events:none; max-height:55%; }
+/* Capture scoreboard swipes above the game's look controls and allow native scrolling. */
+.touch-layout .scoreboard { z-index:2; pointer-events:auto; touch-action:pan-y; overscroll-behavior-y:contain; max-height:55%; }
 .touch-layout .toast { top:100px; bottom:auto; }
 #world canvas { touch-action:none; }
 @media (orientation:portrait) {
