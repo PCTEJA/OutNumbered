@@ -1,5 +1,6 @@
 import './style.css';
 import './lobby.css';
+import { setupFullscreen } from './fullscreen';
 import { icon } from './icons';
 import type { Game } from './game/game';
 import type { MapId } from './shared/world';
@@ -35,7 +36,7 @@ $('#app').innerHTML = `
       <section class="match-panel">
         <div class="eyebrow"><span></span> READY WHEN YOU ARE</div>
         <h1>Read it.<br> Type it.<br><em>Eliminate.</em></h1>
-        <p class="intro">Your eyes are your weapon.</p>
+        <p class="intro">Your eyes are your weapon.</p><button type="button" class="fullscreen-button" data-fullscreen aria-pressed="false">⤢ Full screen</button>
         <div class="match-setup">
           <div class="section-label">GAME MODE</div>
           <div class="mode-options" role="group" aria-label="Game mode">
@@ -82,7 +83,7 @@ $('#app').innerHTML = `
     <div class="respawn-banner" id="respawn-banner" hidden><span>THEY DID THE MATH.</span><h2>OUTNUMBERED.</h2><p id="respawn-text">Back in the game in 3…</p></div>
     <section class="scoreboard" id="scoreboard" hidden><div class="section-label"><span>MATCH SCOREBOARD</span><span>HOLD TAB</span></div><h2>Who’s counting?</h2><div class="scoreboard-head"><span>PLAYER</span><span>ELIMINATIONS</span><span>DEATHS</span></div><div id="scoreboard-rows"></div></section>
   </div>
-  <div id="pause" class="pause-overlay" hidden><div class="pause-card"><div class="eyebrow">TAKE A BREATHER</div><h2 id="pause-title">Eyes back<br>in the game.</h2><p id="pause-copy">Read a forehead, type its four digits, then press Enter. Your match continues while paused.</p><button id="resume-button" class="launch-button">JUMP IN ${icon('arrow')}</button><div class="pause-actions"><button id="pause-settings">Settings</button><button id="leave-button">${icon('exit')} Leave match</button></div><small id="capture-note">Click to capture your mouse · Esc to release</small></div></div>
+  <div id="pause" class="pause-overlay" hidden><div class="pause-card"><div class="eyebrow">TAKE A BREATHER</div><h2 id="pause-title">Eyes back<br>in the game.</h2><p id="pause-copy">Read a forehead, type its four digits, then press Enter. Your match continues while paused.</p><button id="resume-button" class="launch-button">JUMP IN ${icon('arrow')}</button><button type="button" class="fullscreen-button" data-fullscreen aria-pressed="false">⤢ Full screen</button><div class="pause-actions"><button id="pause-settings">Settings</button><button id="leave-button">${icon('exit')} Leave match</button></div><small id="capture-note">Click to capture your mouse · Esc to release</small></div></div>
   <dialog id="modal"><div id="modal-content"></div><button id="close-modal" class="icon-button modal-close" aria-label="Close dialog">${icon('close')}</button></dialog>
 `;
 
@@ -221,3 +222,5 @@ $('#share-room').addEventListener('click', async () => {
   catch { game.toast(`Room code: ${game.room}`); }
 });
 window.addEventListener('beforeunload', () => game?.dispose());
+
+setupFullscreen();

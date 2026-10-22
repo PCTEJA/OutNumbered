@@ -26,6 +26,11 @@ dialog{border:0;color:var(--ink);background:var(--cream);border-radius:8px;paddi
 #hud-performance[data-health="poor"] { color: #ffaaa0; }
 
 /* Touch HUD stays native resolution while the 3D renderer adapts independently. */
+.fullscreen-button { display:block; width:100%; min-height:44px; margin:12px 0; padding:12px 16px; border:1px solid #193d3c40; border-radius:12px; background:linear-gradient(135deg,#193d3c,#32635c); color:#fff8e5; font-weight:700; letter-spacing:.5px; box-shadow:0 4px 12px #10292920; }
+.fullscreen-button:hover,.fullscreen-button[aria-pressed=true] { background:#ffd755; color:#193d3c; }
+.fullscreen-notice { position:fixed; z-index:100; left:50%; bottom:max(24px,env(safe-area-inset-bottom)); transform:translateX(-50%); width:min(420px,90vw); padding:16px 20px; border:1px solid #fff8e550; border-radius:16px; background:#163c3df5; color:#fff8e5; box-shadow:0 8px 40px #0005; font-size:14px; line-height:1.5; }
+html:fullscreen { background:#163c3d; }
+.pause-card { max-height:calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y:auto; }
 .touch-controls { position:absolute; inset:0; pointer-events:none; user-select:none; -webkit-user-select:none; }
 .touch-controls button,.touch-stick,.touch-look { touch-action:none; pointer-events:auto; }
 .touch-controls button { min-width:48px; min-height:48px; border:1px solid #fff8e580; border-radius:16px; background:#183b3dd9; color:#fff8e5; font:700 12px/1.2 'Barlow',sans-serif; padding:8px; }

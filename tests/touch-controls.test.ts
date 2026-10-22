@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { stickVector, wantsTouchControls } from '../src/game/touch-controls';
+import { stickVector, wantsTouchControls, touchLookScale } from '../src/game/touch-controls';
+
+test('touch turns follow screen distance consistently across orientations, with precision zoom', () => {
+  for (const width of [360, 390, 844, 1024]) {
+    assert.ok(Math.abs(width / 2 * touchLookScale(width, .00225, false) - Math.PI) < 1e-10);
+    assert.ok(Math.abs(touchLookScale(width, .00225, true) / touchLookScale(width, .00225, false) - .37) < 1e-10);
+  }
+  assert.equal(touchLookScale(390, .0045, false), 2 * touchLookScale(390, .00225, false));
+  assert.ok(Number.isFinite(touchLookScale(0, .00225, false)));
+});
 
 test('touch detection supports phones and tablets without treating every narrow window as mobile', () => {
   assert.equal(wantsTouchControls('auto', true, true, 5), true);

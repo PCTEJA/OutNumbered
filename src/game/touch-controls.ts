@@ -9,6 +9,11 @@ export function stickVector(x: number, y: number, radius: number) {
   return { strafe: distance ? x / distance * magnitude : 0, forward: distance ? -y / distance * magnitude : 0 };
 }
 
+/** A half-screen swipe turns 180 degrees at the default setting, in either orientation. */
+export function touchLookScale(width: number, sensitivity: number, zoomed: boolean) {
+  return Math.PI * 2 / Math.max(320, width) * (sensitivity / .00225) * (zoomed ? .37 : 1);
+}
+
 interface Actions {
   action: (code: string, key?: string) => void;
   look: (x: number, y: number) => void;
@@ -73,7 +78,7 @@ export class TouchControls {
     }, options);
     this.stick.addEventListener('pointermove', e => this.move(e), options);
     this.lookZone.addEventListener('pointerdown', e => {
-      if (!this.active || this.lookId !== undefined) return;
+      if (e.pointerType === 'mouse' || !this.active || this.lookId !== undefined) return;
       e.preventDefault(); this.lookId = e.pointerId;
       this.lookX = e.clientX; this.lookY = e.clientY;
       this.lookZone.setPointerCapture(e.pointerId);

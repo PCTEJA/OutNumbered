@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { animateFlag, createFlagCloth, createFlagHardware } from './flag';
 import { MotionBuffer } from './motion';
 import { Jump } from './jump';
-import { TouchControls } from './touch-controls';
+import { TouchControls, touchLookScale } from './touch-controls';
 import { World } from './world';
 import { createAvatar, animateAvatar, updateAvatarNumber, disposeAvatar, createEquipment } from './avatar';
 import { loadCore, type GameCore } from './wasm';
@@ -39,6 +39,9 @@ export class Game {
   private playing = false;
   private controlling = false;
   private dragging = false;
+  private lockPending = false;
+  private mouseX = 0;
+  private mouseY = 0;
   private zoomed = false;
   private sensitivity = .002;
   private map: MapId = 'campus';
@@ -112,7 +115,7 @@ export class Game {
       action: (code, key) => this.action(code, key),
       look: (x, y) => {
         if (!this.controlling) return;
-        const sensitivity = this.sensitivity * (this.zoomed ? .37 : 1);
+        const sensitivity = touchLookScale(innerWidth, this.sensitivity, this.zoomed);
         this.yaw -= x * sensitivity;
         this.pitch = clamp(this.pitch - y * sensitivity, -1.35, 1.35);
       },
@@ -123,23 +126,37 @@ export class Game {
     document.addEventListener('keydown', e => this.keyDown(e), { signal });
     document.addEventListener('keyup', e => { this.keys.delete(e.code); if (/^(Key[WASD]|ShiftLeft|ShiftRight)$/.test(e.code)) this.sendInput(); if (e.code === 'Tab') $('scoreboard').hidden = true; }, { signal });
     document.addEventListener('mousemove', e => {
-      if (!this.playing || !this.controlling || (!document.pointerLockElement && !this.dragging)) return;
-      this.yaw -= e.movementX * this.sensitivity * (this.zoomed ? .37 : 1);
-      this.pitch = clamp(this.pitch - e.movementY * this.sensitivity * (this.zoomed ? .37 : 1), -1.35, 1.35);
+      if (!this.playing || !this.controlling || (document.pointerLockElement !== this.renderer.domElement && !this.dragging)) return;
+      const locked = document.pointerLockElement === this.renderer.domElement;
+      const x = locked ? e.movementX : e.clientX - this.mouseX;
+      const y = locked ? e.movementY : e.clientY - this.mouseY;
+      this.mouseX = e.clientX; this.mouseY = e.clientY;
+      this.yaw -= x * this.sensitivity * (this.zoomed ? .37 : 1);
+      this.pitch = clamp(this.pitch - y * this.sensitivity * (this.zoomed ? .37 : 1), -1.35, 1.35);
     }, { signal });
-    this.renderer.domElement.addEventListener('mousedown', e => {
-      if (!this.playing || this.touch.enabled) return;
-      if (!this.controlling) this.capture();
+    document.addEventListener('mousedown', e => {
+      if (e.target !== this.renderer.domElement && !(e.target instanceof Element && e.target.closest('.touch-look'))) return;
+      if (!this.playing || (e.button !== 0 && e.button !== 2)) return;
+      if (document.pointerLockElement !== this.renderer.domElement) this.capture(true);
+      this.mouseX = e.clientX; this.mouseY = e.clientY;
       this.dragging = true;
       if (e.button === 2 && this.controlling) { e.preventDefault(); this.setZoom(!this.zoomed); }
     }, { signal });
     document.addEventListener('mouseup', () => { this.dragging = false; }, { signal });
     this.renderer.domElement.addEventListener('contextmenu', e => e.preventDefault(), { signal });
     document.addEventListener('pointerlockchange', () => {
+      if (document.pointerLockElement === this.renderer.domElement && !this.controlling) {
+        document.exitPointerLock();
+        return;
+      }
+      this.lockPending = false;
       this.controlling = document.pointerLockElement === this.renderer.domElement;
       this.touch.setActive(this.controlling);
       if (!this.controlling) { this.keys.clear(); this.jump.reset(); this.sendInput(); }
       this.callbacks.onPointerLock(this.controlling);
+    }, { signal });
+    document.addEventListener('pointerlockerror', () => {
+      if (this.lockPending) this.enableDragLook();
     }, { signal });
     window.addEventListener('blur', () => this.pause(), { signal });
     document.addEventListener('visibilitychange', () => {
@@ -258,23 +275,29 @@ export class Game {
     this.frameId = requestAnimationFrame(time => this.frame(time));
   }
 
-  capture() {
+  capture(mouse = false) {
     if (!this.playing) return;
     if (this.state?.ended) { this.toast('Round complete. Leave the match to start another.'); return; }
     void this.audio.unlock().catch(() => undefined);
     this.renderer.domElement.focus();
-    if (this.touch.enabled) {
+    if (this.touch.enabled && !mouse) {
       this.controlling = true;
       this.touch.setActive(true);
       this.callbacks.onPointerLock(true);
       return;
     }
+    if (this.lockPending) return;
+    this.lockPending = true;
+    // Keep drag look usable while asynchronous pointer capture is pending.
+    this.controlling = true;
+    this.callbacks.onPointerLock(true);
     try {
       const result = this.renderer.domElement.requestPointerLock();
-      if (result) result.catch(() => this.enableDragLook());
+      if (result) result.catch(() => { if (this.lockPending) this.enableDragLook(); });
     } catch { this.enableDragLook(); }
   }
   private pause() {
+    this.lockPending = false;
     this.controlling = false;
     this.dragging = false;
     this.keys.clear(); this.jump.reset(); this.touch.setActive(false);
@@ -283,6 +306,8 @@ export class Game {
     if (this.playing) this.callbacks.onPointerLock(false);
   }
   private enableDragLook() {
+    this.lockPending = false;
+    if (!this.playing) return;
     this.controlling = true;
     this.callbacks.onPointerLock(true);
     this.toast('Drag to look, or use arrow keys. WASD moves. Space jumps. Esc pauses.');

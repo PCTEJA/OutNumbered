@@ -1,0 +1,9 @@
+{
+  "name": "OutNumbered",
+  "short_name": "OutNumbered",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#163c3d",
+  "theme_color": "#163c3d",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

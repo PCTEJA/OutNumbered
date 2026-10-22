@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:5173**. The command builds the WASM core if needed and runs the website and match server together. Pick **Practice with bots** for an immediate match against five bots. A desktop keyboard and mouse are required for the FPS; the lobby is responsive.
+Open **http://localhost:5173**. The command builds the WASM core if needed and runs the website and match server together. Pick **Practice with bots** for an immediate match against five bots. Play with a keyboard and mouse or the on-screen touch controls.
 
 Choose **Characters** in the lobby, or open **http://localhost:5173/characters.html**, to inspect the playable cast. The studio includes four hairstyles, varsity jackets, hoodies, polos, a pleated skirt variant, five-digit hands, articulated walking, team colors, and close-up equipment grips. Drag to rotate and use **Face** or **Hands** to inspect the details. The studio uses the same models as matches and is also included in the production build.
 
@@ -60,6 +60,10 @@ Rooms currently live in server memory. Vercel can route different clients to dif
 | Esc | Release mouse / pause menu |
 
 Your own number is hidden. Correct guesses eliminate eligible opponents within range who are visible or were seen in the last six seconds. Forehead orientation, solid cover, smoke, team membership, spawn protection, and guessing cooldowns are checked by the server. The camera preserves a still image for reading and recall; it does not reveal hidden opponents.
+
+On phones and tablets, drag the left stick to move and swipe the right side to turn. At default sensitivity, a half-screen swipe turns 180 degrees; zoom reduces sensitivity for precise reading. Settings → Look sensitivity adjusts turning speed. Mouse input remains available on hybrid devices.
+
+Use **Full screen** in the lobby or pause menu to hide browser navigation where supported. Exit using the same button or the browser’s exit gesture. On iPhone browsers without document fullscreen, use Share → Add to Home Screen and launch the saved app.
 
 ## Included
 
@@ -110,7 +114,7 @@ Tests cover actual WASM collision/stamina behavior, clear spawns and movement, d
 
 ## Prototype boundaries
 
-This is a playable foundation, not a finished commercial release. Characters are original procedural stylized meshes with layered clothing, shaped faces and modeled fingers; environments remain simpler than the references. School wings are solid cover; the museum is an explorable interior. Bots use lightweight steering rather than a navmesh. Rooms and results are in memory and disappear on server restart. No accounts, ranked progression, persistence, voice chat, mobile touch controls, or production matchmaking infrastructure are included.
+This is a playable foundation, not a finished commercial release. Characters are original procedural stylized meshes with layered clothing, shaped faces and modeled fingers; environments remain simpler than the references. School wings are solid cover; the museum is an explorable interior. Bots use lightweight steering rather than a navmesh. Rooms and results are in memory and disappear on server restart. No accounts, ranked progression, persistence, voice chat, or production matchmaking infrastructure are included.
 
 The server validates gameplay, but opponent numbers are sent to connected clients for rendering; a modified client can inspect them. Production anti-cheat would need per-observer visibility replication, authentication, abuse controls, deployment monitoring, and internet latency testing.
 
