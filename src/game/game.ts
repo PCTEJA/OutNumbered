@@ -3,7 +3,6 @@ import { animateFlag, createFlagCloth, createFlagHardware } from './flag';
 import { MotionBuffer } from './motion';
 import { World } from './world';
 import { createAvatar, animateAvatar, updateAvatarNumber, disposeAvatar, createEquipment } from './avatar';
-import { loadCharacterModel } from './character-model';
 import { loadCore, type GameCore } from './wasm';
 import { GameAudio } from './audio';
 import { AdaptiveResolution, renderPixelRatio } from './performance';
@@ -159,8 +158,6 @@ export class Game {
   }
 
   async start(options: Options): Promise<void> {
-    this.callbacks.onStatus('LOADING CHARACTER');
-    await loadCharacterModel();
     this.callbacks.onStatus('LOADING WASM CORE');
     this.core ??= await loadCore();
     this.map = options.map;
