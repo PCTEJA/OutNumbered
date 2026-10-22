@@ -1,6 +1,88 @@
+<div align="center">
+
+<img src="public/favicon.svg" width="64" height="64" alt="OutNumbered emblem" />
+
 # OutNumbered
 
-A playable, original browser FPS prototype inspired by the supplied references. Read an opponent’s forehead, type four digits, and press Enter. Features a **real WebAssembly simulation core**, Three.js rendering, streamed procedural environments, and a Node.js authoritative WebSocket server.
+### Read it. Type it. Eliminate.
+
+A browser-based 3D number-tag game where observation, memory, and movement win the match.
+
+**Three.js · TypeScript · WebAssembly · Authoritative WebSockets**
+
+### [▶ PLAY THE LIVE GAME](https://outnumbered-henna.vercel.app)
+
+**[outnumbered-henna.vercel.app](https://outnumbered-henna.vercel.app)**
+
+[Explore the character studio](https://outnumbered-henna.vercel.app/characters.html) · [Run locally](#run-locally) · [How to play](#how-to-play) · [Engineering](#architecture-and-streaming)
+
+<a href="https://outnumbered-henna.vercel.app"><img src="docs/screenshots/optimized-lobby.jpg" width="100%" alt="OutNumbered lobby with Garden Party arena preview, game modes, and practice options" /></a>
+
+*An original playable prototype. No account required. Keyboard, mouse, and touch controls.*
+
+</div>
+
+> **Start here:** Open the **[live game](https://outnumbered-henna.vercel.app)** and choose **Practice with bots** for an immediate match against five bots. The hosted demo is best suited to practice; [deployment notes](#vercel-deployment) explain the multiplayer limits.
+
+---
+
+[Overview](#the-game) · [Screenshots](#in-game-gallery) · [Playgrounds](#three-connected-playgrounds) · [Controls](#controls) · [Setup](#run-locally) · [Validation](#validation) · [Art direction](#art-direction) · [Technical docs](#technical-documentation)
+
+## The game
+
+Your number is visible to everyone except you. Read an opponent’s forehead, remember the four digits, and submit them before they do the same to you. Use cover, binoculars, snapshots, and distractions to create an opening.
+
+| Three ways to compete | One shared world |
+| --- | --- |
+| **Deathmatch** — every player is a target | **Three connected playgrounds** with streamed 3D detail |
+| **Team Deathmatch** — coordinate against the other color | **Up to 20 players per room**, with shareable room codes |
+| **Capture the Flag** — steal, return, and defend | **Bot practice** for an immediate solo session |
+
+## How to play
+
+1. **Get a good look.** Move through the arena and read an opponent’s four-digit number. Keep your own forehead out of sight.
+2. **Make it count.** Type the digits and press **Enter**. Visible opponents, or opponents seen within the last six seconds, can be eligible targets.
+3. **Create an opening.** Zoom with binoculars, capture a five-second photo, or use flash, smoke, and distraction grenades.
+
+The server checks range, visibility, cover, teams, spawn protection, and guessing cooldowns. A photograph preserves what you saw; it does not reveal hidden players.
+
+## In-game gallery
+
+Repository captures from different development stages; the deployed demo may differ from the latest local graphics refresh. Performance readouts in screenshots are individual captures, not benchmarks.
+
+| First-person play | Character detail |
+| :---: | :---: |
+| ![Garden Party gameplay with binoculars and refreshed lighting](docs/screenshots/graphics-refresh-gameplay.png) | ![Procedural character after the graphics refresh](docs/screenshots/graphics-refresh-character.png) |
+| **Observation, movement, and gadgets** | **Original procedural character models** |
+| ![Character studio inspection interface](docs/screenshots/character-studio.jpg) | ![Close-up of modeled hands and equipment grips](docs/screenshots/hand-detail.jpg) |
+| **Interactive character studio** | **Hands and equipment** |
+
+<details>
+<summary><strong>Explore the screenshot archive · earlier development captures</strong></summary>
+
+Earlier development captures document the evolution of the interface and rendering.
+
+| Lobby | Gameplay |
+| :---: | :---: |
+| ![Earlier lobby capture](docs/screenshots/lobby.jpg) | ![Earlier first-person gameplay capture](docs/screenshots/gameplay.jpg) |
+| ![Gameplay with character models](docs/screenshots/characters-gameplay.jpg) | ![Deployed gameplay capture](docs/screenshots/deployed-gameplay.jpg) |
+
+![Gameplay captured during optimization work](docs/screenshots/optimized-gameplay.jpg)
+
+The [optimized lobby capture](docs/screenshots/optimized-lobby.jpg) is featured at the top of this README.
+
+</details>
+
+## Three connected playgrounds
+
+Choose your starting area in the lobby. All three environments remain reachable during a match.
+
+| The Schoolyard | Garden Party | After Hours |
+| :---: | :---: | :---: |
+| ![Schoolyard arena preview](public/arenas/campus.webp) | ![Garden Party arena preview](public/arenas/garden.webp) | ![After Hours museum arena preview](public/arenas/museum.webp) |
+| School buildings, courts, and climbing-wall scenery | Foliage, pergolas, and garden sightlines | An explorable museum interior and exhibits |
+
+---
 
 ## Run locally
 
@@ -49,6 +131,7 @@ Rooms currently live in server memory. Vercel can route different clients to dif
 | Mouse | Look (drag to look if pointer lock is unavailable) |
 | Arrow keys | Alternative look controls |
 | Shift | Sprint; consumes recovering stamina |
+| Space | Jump |
 | 0–9 / numpad | Enter a four-digit number |
 | Enter | Submit the number |
 | Backspace | Delete a digit |
@@ -119,3 +202,70 @@ This is a playable foundation, not a finished commercial release. Characters are
 The server validates gameplay, but opponent numbers are sent to connected clients for rendering; a modified client can inspect them. Production anti-cheat would need per-observer visibility replication, authentication, abuse controls, deployment monitoring, and internet latency testing.
 
 Technical references: [Three.js renderer](https://threejs.org/docs/pages/WebGLRenderer.html), [AssemblyScript compiler](https://www.assemblyscript.org/compiler.html).
+
+## Art direction
+
+These **AI-generated concept sheets are visual development references**, not screenshots or a promise of the current game's rendering quality. The playable characters and environments use procedural geometry. See the [character skill sheet](docs/art-direction/v1/CHARACTER-SKILL-SHEET.md) for the modeling brief and [generation prompts](docs/art-direction/v1/PROMPTS.md) for provenance.
+
+<details>
+<summary><strong>Character design collection · 4 reference sheets</strong></summary>
+
+| Cropped varsity | Ponytail polo |
+| :---: | :---: |
+| ![Cropped varsity character concept with orthographic views and material details](docs/art-direction/v1/01-character-cropped-varsity.png) | ![Ponytail polo character concept with orthographic views and material details](docs/art-direction/v1/02-character-ponytail-polo.png) |
+| **Curly hoodie** | **Swept polo** |
+| ![Curly hoodie character concept and construction details](docs/art-direction/v1/03-character-curly-hoodie.png) | ![Swept polo character concept and construction details](docs/art-direction/v1/04-character-swept-polo.png) |
+
+</details>
+
+<details>
+<summary><strong>Environment collection · 3 reference sheets</strong></summary>
+
+### The Schoolyard — environment concept
+
+![Schoolyard environment concept sheet](docs/art-direction/v1/06-schoolyard.png)
+
+### Garden Party — environment concept
+
+![Garden Party environment concept sheet](docs/art-direction/v1/07-garden-party.png)
+
+### After Hours — environment concept
+
+![After Hours museum environment concept sheet](docs/art-direction/v1/08-after-hours.png)
+
+</details>
+
+<details>
+<summary><strong>Props and movement · 2 reference sheets</strong></summary>
+
+### Team flags — prop concept
+
+![Red and blue team flag construction and cloth reference](docs/art-direction/v1/05-team-flags.png)
+
+### Movement and grips — animation reference
+
+![Movement poses and equipment grip reference sheet](docs/art-direction/v1/09-movement-and-grips.png)
+
+</details>
+
+## Technical documentation
+
+| Guide | What it covers |
+| --- | --- |
+| [WASM and streaming](docs/wasm-streaming.md) | Shared simulation core and world streaming design |
+| [Verification notes](docs/verification.md) | Recorded checks, deployment evidence, and limitations |
+| [Character refresh](docs/character-refresh.md) | Character geometry and rendering changes |
+| [Character reference implementation](docs/character-reference-implementation.md) | Translating visual references into procedural models |
+| [Graphics refresh](docs/graphics-refresh.md) | Material, lighting, and detail improvements |
+
+---
+
+<div align="center">
+
+**Your eyes are your weapon.**
+
+### [Play OutNumbered →](https://outnumbered-henna.vercel.app)
+
+[Back to top](#outnumbered)
+
+</div>
