@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { animateFlag, createFlagCloth, createFlagHardware } from './flag';
 import { MotionBuffer } from './motion';
+import { Jump } from './jump';
 import { World } from './world';
 import { createAvatar, animateAvatar, updateAvatarNumber, disposeAvatar, createEquipment } from './avatar';
 import { loadCore, type GameCore } from './wasm';
@@ -79,7 +80,7 @@ export class Game {
   private respawning = false;
   private roundShown = false;
   private firstState = true;
-  private jumpAt = 0;
+  private jump = new Jump();
 
   constructor(private host: HTMLElement, private callbacks: Callbacks) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -93,7 +94,7 @@ export class Game {
     this.renderer.toneMappingExposure = 1.15;
     this.renderer.domElement.tabIndex = 0;
     this.renderer.domElement.hidden = true;
-    this.renderer.domElement.setAttribute('aria-label', 'OutNumbered 3D game. WASD to move, mouse to look, digits and Enter to eliminate.');
+    this.renderer.domElement.setAttribute('aria-label', 'OutNumbered 3D game. WASD to move, Space to jump, mouse to look, digits and Enter to eliminate.');
     host.append(this.renderer.domElement);
     this.world = new World(this.scene, group => this.renderer.compileAsync(group, this.camera, this.scene));
     this.camera.rotation.order = 'YXZ';
@@ -122,12 +123,12 @@ export class Game {
     this.renderer.domElement.addEventListener('contextmenu', e => e.preventDefault(), { signal });
     document.addEventListener('pointerlockchange', () => {
       this.controlling = document.pointerLockElement === this.renderer.domElement;
-      if (!this.controlling) { this.keys.clear(); this.sendInput(); }
+      if (!this.controlling) { this.keys.clear(); this.jump.reset(); this.sendInput(); }
       this.callbacks.onPointerLock(this.controlling);
     }, { signal });
-    window.addEventListener('blur', () => { this.keys.clear(); this.sendInput(); }, { signal });
+    window.addEventListener('blur', () => { this.keys.clear(); this.jump.reset(); this.sendInput(); }, { signal });
     document.addEventListener('visibilitychange', () => {
-      this.keys.clear(); this.sendInput();
+      this.keys.clear(); this.jump.reset(); this.sendInput();
       cancelAnimationFrame(this.frameId);
       this.resolution.reset();
       if (!document.hidden && this.playing) {
@@ -170,7 +171,7 @@ export class Game {
     this.roundShown = false;
     this.respawning = false;
     this.stamina = 100;
-    this.keys.clear();
+    this.keys.clear(); this.jump.reset();
     this.pitch = 0;
     this.photoUntil = this.photoReady = this.flashUntil = 0;
     this.equipmentReturnAt = this.throwUntil = 0;
@@ -254,7 +255,7 @@ export class Game {
   private enableDragLook() {
     this.controlling = true;
     this.callbacks.onPointerLock(true);
-    this.toast('Drag to look, or use arrow keys. WASD moves. Esc pauses.');
+    this.toast('Drag to look, or use arrow keys. WASD moves. Space jumps. Esc pauses.');
     $('capture-note').textContent = 'Drag to look · Arrow keys also turn · Esc to pause';
   }
   toast(message: string) { $('toast').textContent = message; $('toast').classList.add('visible'); this.toastUntil = performance.now() + 3400; }
@@ -268,13 +269,13 @@ export class Game {
   private sendInput() { if (this.playing) this.send({ type: 'input', ...this.input(), yaw: this.yaw }); }
   private keyDown(e: KeyboardEvent) {
     if (!this.playing || document.querySelector('dialog[open]')) return;
-    if (e.code === 'Escape' && !document.pointerLockElement && this.controlling) { this.controlling = false; this.keys.clear(); this.sendInput(); this.callbacks.onPointerLock(false); return; }
+    if (e.code === 'Escape' && !document.pointerLockElement && this.controlling) { this.controlling = false; this.keys.clear(); this.jump.reset(); this.sendInput(); this.callbacks.onPointerLock(false); return; }
     if (!this.controlling) return;
     if (['Tab', 'Space', 'Backspace', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code) || /^Digit|^Numpad/.test(e.code)) e.preventDefault();
     this.keys.add(e.code);
     if (!e.repeat && /^(Key[WASD]|ShiftLeft|ShiftRight)$/.test(e.code)) this.sendInput();
     if (e.code === 'Tab') { if (this.state) this.drawScoreboard(this.state); $('scoreboard').hidden = false; return; }
-    if (e.repeat || !this.state?.players.find(p => p.id === this.id)?.alive) return;
+    if (e.repeat || this.state?.ended || !this.state?.players.find(p => p.id === this.id)?.alive) return;
     if (/^[0-9]$/.test(e.key)) { if (this.digits.length < 4) { this.digits += e.key; this.drawDigits(); this.audio.play('key'); } return; }
     if (e.code === 'Backspace') { this.digits = this.digits.slice(0, -1); this.drawDigits(); }
     if (e.code === 'Enter' || e.code === 'NumpadEnter') {
@@ -294,7 +295,7 @@ export class Game {
       if (cooldown > 0) this.toast(`${this.gadget.toUpperCase()} ready in ${Math.ceil(cooldown)}s`);
       else { this.sendInput(); this.send({ type: 'gadget', kind: this.gadget }); this.changeEquipment(this.gadget); this.throwUntil = performance.now() + 450; this.audio.play('throw'); }
     }
-    if (e.code === 'Space' && performance.now() - this.jumpAt > 800) this.jumpAt = performance.now();
+    if (e.code === 'Space') this.jump.press(performance.now());
   }
 
   private drawDigits() {
@@ -370,6 +371,7 @@ export class Game {
       if (Math.abs(self.stamina - this.stamina) > 3) this.stamina = self.stamina;
     }
     this.respawning = !self.alive;
+    if (this.respawning) this.jump.reset();
     $('respawn-banner').hidden = self.alive;
     $('hud-player-name').textContent = `${self.name}${state.mode === 'deathmatch' ? '' : ` · ${self.team.toUpperCase()}`}`;
     $('hud-mode').textContent = modeNames[state.mode];
@@ -403,7 +405,7 @@ export class Game {
     if (state.mode === 'ctf') this.syncFlags(state);
     if (state.ended && !this.roundShown) {
       this.roundShown = true;
-      this.keys.clear();
+      this.keys.clear(); this.jump.reset();
       document.exitPointerLock();
       this.controlling = false;
       this.callbacks.onPointerLock(false);
@@ -538,10 +540,9 @@ export class Game {
       this.position.z = clamp(this.position.z, WORLD_LIMITS.minZ + .38, WORLD_LIMITS.maxZ - .38);
       this.stamina = this.core.stamina(this.stamina, moving, sprint, dt);
     }
-    if (moving && time - this.footstepAt > (sprint ? 260 : 380)) { this.audio.play('step'); this.footstepAt = time; }
-    const bob = moving ? Math.sin(seconds * (sprint ? 16 : 11)) * .032 : Math.sin(seconds * 2) * .006;
-    const jumpT = (time - this.jumpAt) / 650;
-    const hop = jumpT > 0 && jumpT < 1 ? Math.sin(jumpT * Math.PI) * .23 : 0;
+    const hop = this.jump.height(time);
+    if (moving && hop === 0 && time - this.footstepAt > (sprint ? 260 : 380)) { this.audio.play('step'); this.footstepAt = time; }
+    const bob = hop > 0 ? 0 : moving ? Math.sin(seconds * (sprint ? 16 : 11)) * .032 : Math.sin(seconds * 2) * .006;
     this.camera.position.set(this.position.x, PLAYER_EYE_HEIGHT + bob + hop, this.position.z);
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
     const targetFov = this.zoomed ? 27 : sprint && moving ? 78 : 72;
@@ -645,7 +646,7 @@ export class Game {
     cancelAnimationFrame(this.frameId);
     this.playing = false;
     this.controlling = false;
-    this.keys.clear();
+    this.keys.clear(); this.jump.reset();
     this.socket?.close();
     this.socket = undefined;
     this.state = undefined;
