@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { findPath, turnTowards, type Waypoint } from './navigation.js';
 import { randomInt, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { extname, resolve, sep } from 'node:path';
@@ -85,6 +86,8 @@ interface Player extends PlayerState {
   cooldowns: Record<GadgetKind, number>;
   blindedUntil: number;
   botTarget?: { x: number; z: number; until: number };
+  botPath?: Waypoint[];
+  patrolIndex?: number;
   botReading?: { id: string; since: number };
   distractedUntil: number;
 }
@@ -347,6 +350,7 @@ export async function createGameServer({ port = 3001, host = '0.0.0.0', listen =
         if (p.isBot && dist(p, { x, z }) < 20) {
           p.distractedUntil = now + duration * 1000;
           p.botTarget = { x, z, until: p.distractedUntil };
+          p.botPath = undefined;
           p.botReading = undefined;
         }
       }
@@ -360,37 +364,41 @@ export async function createGameServer({ port = 3001, host = '0.0.0.0', listen =
     targets.sort((a, b) => dist(bot, a) - dist(bot, b));
     const target = bot.distractedUntil > now ? undefined : targets[0];
     if (target) {
-      bot.yaw = Math.atan2(-(target.x - bot.x), -(target.z - bot.z));
+      bot.yaw = turnTowards(bot.yaw, Math.atan2(-(target.x - bot.x), -(target.z - bot.z)), TICK_MS / 1000);
       if (bot.botReading?.id !== target.id) bot.botReading = { id: target.id, since: now };
       // Players get a generous reading window; bots cannot shoot through smoke or walls.
       if (now - bot.botReading.since > 7_500) {
         eliminate(room, bot, target, now);
         bot.botReading = undefined;
       }
-      const side = Math.sin(now / 1600 + bot.x) * 0.65;
-      move(room, bot, Math.cos(bot.yaw) * side * TICK_MS / 1000, -Math.sin(bot.yaw) * side * TICK_MS / 1000);
+      // Hold a readable stance while studying an opponent instead of swaying randomly.
+      bot.botPath = undefined;
       return;
     }
     bot.botReading = undefined;
     if (!bot.botTarget || bot.botTarget.until < now || dist(bot, bot.botTarget) < 1) {
-      let goal = SPAWNS[room.map][randomInt(SPAWNS[room.map].length)]!;
+      const patrol = SPAWNS[room.map];
+      bot.patrolIndex = ((bot.patrolIndex ?? Math.max(0, BOT_NAMES.indexOf(bot.name))) + 1) % patrol.length;
+      let goal = patrol[bot.patrolIndex]!;
       if (room.mode === 'ctf') {
         const opposite = bot.team === 'red' ? 'blue' : 'red';
         goal = room.flags[opposite].carrierId === bot.id ? room.flags[bot.team] : room.flags[opposite];
       }
-      bot.botTarget = { x: goal.x, z: goal.z, until: now + 5_000 };
+      bot.botTarget = { x: goal.x, z: goal.z, until: now + 20_000 };
+      bot.botPath = undefined;
     }
-    const dx = bot.botTarget.x - bot.x;
-    const dz = bot.botTarget.z - bot.z;
-    const length = Math.hypot(dx, dz) || 1;
-    bot.yaw = Math.atan2(-dx, -dz);
-    const oldX = bot.x;
-    const oldZ = bot.z;
-    move(room, bot, dx / length * 2.4 * TICK_MS / 1000, dz / length * 2.4 * TICK_MS / 1000);
-    if (dist(bot, { x: oldX, z: oldZ }) < 0.02) {
-      // Pick a lateral waypoint when blocked, instead of walking forever into cover.
-      bot.botTarget = { x: bot.x + (randomInt(2) ? 5 : -5), z: bot.z + (randomInt(2) ? 5 : -5), until: now + 2_000 };
-    }
+    bot.botPath ??= findPath(bot, bot.botTarget);
+    while (bot.botPath.length && dist(bot, bot.botPath[0]) < .16) bot.botPath.shift();
+    const waypoint = bot.botPath[0];
+    if (!waypoint) { bot.botTarget.until = now; return; }
+    const dx = waypoint.x - bot.x, dz = waypoint.z - bot.z;
+    const heading = Math.atan2(-dx, -dz);
+    bot.yaw = turnTowards(bot.yaw, heading, TICK_MS / 1000);
+    // Turn on the spot at sharp corners before taking the next collision-safe segment.
+    const alignment = Math.max(0, Math.cos(heading - bot.yaw));
+    const length = Math.hypot(dx, dz);
+    const step = Math.min(length, 2.4 * alignment * TICK_MS / 1000);
+    move(room, bot, dx / length * step, dz / length * step);
   }
 
   function tickFlags(room: Room) {
@@ -512,6 +520,7 @@ export async function createGameServer({ port = 3001, host = '0.0.0.0', listen =
             const spawn = teamSpawn(room, p.team);
             p.x = spawn.x; p.z = spawn.z; p.alive = true; p.respawnAt = 0;
             p.number = uniqueNumber(room); p.blindedUntil = 0; p.seen.clear(); p.stamina = 100; p.protectedUntil = now + Math.max(0, respawnGraceMs);
+            p.botPath = undefined; p.botTarget = undefined;
             p.input.forward = p.input.strafe = 0;
             const center = MAP_CENTERS[room.map];
             p.yaw = Math.atan2(-(center.x - p.x), -(center.z - p.z));

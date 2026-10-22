@@ -57,6 +57,14 @@ app.innerHTML = `
           <button data-value="flash" aria-pressed="false">Flash</button>
         </div>
       </fieldset>
+      <fieldset class="control-group" data-character-setting>
+        <legend>Inspection</legend>
+        <div class="segmented" data-control="debug">
+          <button data-value="beauty" aria-pressed="true">Shaded</button>
+          <button data-value="wire" aria-pressed="false">Wireframe</button>
+        </div>
+        <p id="mesh-budget" class="studio-note"></p>
+      </fieldset>
       <p class="studio-note">The same characters and equipment you’ll see in the game, ready to explore from every angle.</p>
     </aside>
     <section class="studio-viewport" aria-label="Interactive 3D character preview">
@@ -136,6 +144,7 @@ let team: Team = 'blue';
 let walking = false;
 let equipment = 'binoculars';
 let mode = 'character';
+let wireframe = false;
 let view: View = 'body';
 let subject = createAvatar(number, team);
 scene.add(subject);
@@ -189,6 +198,19 @@ function updateLabels() {
   app.querySelector('#subject-caption')!.textContent = mode === 'character' ? `${team === 'blue' ? 'Blue' : 'Red'} team · ${walking ? 'Walking' : 'Standing'}` : 'Hands & equipment · Grip detail';
 }
 
+function inspectSubject() {
+  let triangles = 0, draws = 0;
+  subject.traverse(object => {
+    if (!(object instanceof THREE.Mesh)) return;
+    draws++;
+    triangles += (object.geometry.index?.count ?? object.geometry.attributes.position.count) / 3;
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of materials) if ('wireframe' in material) material.wireframe = wireframe;
+  });
+  app.querySelector('#mesh-budget')!.textContent = `${Math.round(triangles).toLocaleString()} triangles · ${draws} meshes`;
+}
+inspectSubject();
+
 function rebuild() {
   disposeAvatar(subject);
   subject = mode === 'character' ? createAvatar(number, team) : createEquipment(equipment, true);
@@ -197,6 +219,7 @@ function rebuild() {
     subject.traverse(object => { if (object instanceof THREE.Mesh) object.castShadow = true; });
   }
   scene.add(subject);
+  inspectSubject();
   plinth.visible = ring.visible = mode === 'character';
   app.querySelectorAll<HTMLElement>('[data-character-setting]').forEach(el => { el.hidden = mode !== 'character'; });
   app.querySelectorAll<HTMLElement>('[data-equipment-setting]').forEach(el => { el.hidden = mode !== 'equipment'; });
@@ -212,7 +235,9 @@ app.querySelectorAll<HTMLButtonElement>('[data-control] button').forEach(button 
     const control = button.closest<HTMLElement>('[data-control]')!.dataset.control!;
     const value = button.dataset.value!;
     setPressed(control, value);
-    if (control === 'view') {
+    if (control === 'debug') {
+      wireframe = value === 'wire'; inspectSubject();
+    } else if (control === 'view') {
       view = value as View;
       if (view === 'hands' && mode === 'character') {
         walking = false;

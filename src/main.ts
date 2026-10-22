@@ -69,7 +69,7 @@ $('#app').innerHTML = `
   <div id="game-hud" class="game-hud" hidden>
     <div class="hud-top-left"><div class="hud-brand">${icon('hash')} OUTNUMBERED</div><span id="hud-zone">THE SCHOOLYARD</span><small id="hud-stream">STREAMING WORLD</small></div>
     <div class="match-score"><div><span class="score-block red" id="red-score">0</span><span class="score-vs">VS</span><span class="score-block blue" id="blue-score">0</span></div><strong id="match-time">05:00</strong><span id="hud-mode">DEATHMATCH</span></div>
-    <div class="hud-top-right"><button id="share-room" title="Copy room code">${icon('copy')} <span id="hud-room">ROOM</span></button><small id="hud-online">CONNECTING</small><div id="killfeed"></div></div>
+    <div class="hud-top-right"><button id="share-room" title="Copy room code">${icon('copy')} <span id="hud-room">ROOM</span></button><small id="hud-online">CONNECTING</small><small id="hud-performance" title="Frame rate and round-trip network latency">— FPS · PING —</small><div id="killfeed"></div></div>
     <div class="reticle" id="reticle"><i></i></div>
     <div class="binocular-mask" id="binocular-mask" hidden></div>
     <div class="photo" id="photo" hidden><img id="photo-image" alt="Captured view of your opponents"/><div><span>ONE MORE LOOK.</span><span id="photo-countdown">5s</span></div></div>

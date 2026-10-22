@@ -94,6 +94,12 @@ tests/                   WASM, world, and WebSocket integration tests
 
 ## Validation
 
+The in-match HUD displays FPS and measured WebSocket round-trip ping in milliseconds. Yellow/red indicate slow frames or high latency, and a stalled-snapshot warning distinguishes a connection interruption from rendering load. Hover over the readout for frame interval, draw calls, triangles, and graphics settings. FPS measures presentation intervals, not GPU execution time.
+
+Opponent rendering uses a 100ms snapshot buffer and holds the last known pose during network stalls. Walk cycles advance with distance traveled and ease into idle. Bots follow collision-cleared patrol routes with bounded turns instead of choosing random escape directions. Movement key changes are sent immediately, alongside the regular 20Hz updates.
+
+Characters have revised adult proportions, smaller eyes, shaped noses and restrained streetwear colors. They remain original procedural, stylized assets rather than GTA-quality scanned or hand-authored models. The character studio includes a wireframe inspection mode and triangle/mesh counts. Across the twelve `Portrait-0` through `Portrait-11` fixtures, average character geometry fell from 19,496 to 12,870 triangles and meshes from 27.8 to 16; these are geometry/draw-submission savings, not an FPS benchmark or a claim about deployed Vercel latency.
+
 ```sh
 npm run typecheck
 npm test

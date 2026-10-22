@@ -16,7 +16,7 @@ function part(geometry: THREE.BufferGeometry, mat: THREE.Material, parent: THREE
 }
 
 function ellipsoid(parent: THREE.Object3D, mat: THREE.Material, p: Point, size: Point, segments = 16) {
-  const mesh = part(new THREE.SphereGeometry(1, segments, 10), mat, parent, ...p);
+  const mesh = part(new THREE.SphereGeometry(1, Math.min(segments, 12), 7), mat, parent, ...p);
   mesh.scale.set(...size);
   return mesh;
 }
@@ -45,7 +45,7 @@ function profile(parent: THREE.Object3D, mat: THREE.Material, rings: [number, nu
 }
 
 function curve(parent: THREE.Object3D, mat: THREE.Material, points: Point[], radius: number, segments = 10) {
-  return part(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p))), segments, radius, 7, false), mat, parent);
+  return part(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p))), segments, radius, 5, false), mat, parent);
 }
 
 /** Bake detail per joint and surface finish, preserving palette colors per vertex. */
@@ -57,9 +57,10 @@ function batchJoint(root: THREE.Object3D) {
     const batches = new Map<number, THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[]>();
     for (const child of joint.children) {
       if (!(child instanceof THREE.Mesh) || !(child.material instanceof THREE.MeshStandardMaterial) || child.userData.keepSeparate) continue;
-      const meshes = batches.get(child.material.roughness) ?? [];
+      const finish = child.material.roughness < .6 ? .5 : .85;
+      const meshes = batches.get(finish) ?? [];
       meshes.push(child as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>);
-      batches.set(child.material.roughness, meshes);
+      batches.set(finish, meshes);
     }
     for (const [roughness, meshes] of batches) {
       const geometries = meshes.map(mesh => {
@@ -149,9 +150,9 @@ export function createAvatar(number: string, team: Team, name = ''): THREE.Group
   const skin = material(skinColor, .72);
   const skinShade = material(new THREE.Color(skinColor).multiplyScalar(.72).getHex());
   const nail = material(new THREE.Color(skinColor).lerp(new THREE.Color(0xffe2d0), .26).getHex(), .55);
-  const cloth = material(team === 'red' ? 0xc94e42 : 0x346ba8);
+  const cloth = material(team === 'red' ? 0x8b3933 : 0x304e70);
   const clothShade = material(team === 'red' ? 0x9f3a35 : 0x284d79);
-  const cream = material(0xf1e5cd);
+  const cream = material(0xcac5b6);
   const pants = material(outfit === 1 ? 0x3a4b53 : 0x293e51);
   const seam = material(0x61717a);
   const rubber = material(0xf1e8d6, .9);
@@ -219,26 +220,29 @@ export function createAvatar(number: string, team: Team, name = ''): THREE.Group
 
   const head = new THREE.Group();
   head.name = 'head';
-  head.position.y = 1.505;
+  // Adult streetwear silhouette: narrower skull and restrained facial features.
+  // The head datum keeps the gameplay card centered at approximately 1.65m.
+  head.position.y = 1.535;
+  head.scale.set(.72, .72, .78);
   root.add(head);
   // A shaped jaw and cheeks prevent the old sphere-on-a-stick silhouette.
-  profile(head, skin, [[-.213, .035, .045, .018], [-.199, .098, .10, .022], [-.158, .151, .145, .014], [-.083, .191, .18], [.005, .207, .187], [.096, .202, .18, -.009], [.17, .167, .144, -.02], [.218, .102, .087, -.023], [.238, .001, .001, -.025]], 28);
+  profile(head, skin, [[-.213, .035, .045, .018], [-.199, .112, .10, .022], [-.158, .148, .145, .014], [-.083, .167, .18], [.005, .181, .187], [.096, .202, .18, -.009], [.17, .167, .144, -.02], [.218, .102, .087, -.023], [.238, .001, .001, -.025]], 28);
   for (const side of [-1, 1]) {
     ellipsoid(head, skin, [side * .204, -.03, -.006], [.037, .057, .034]);
     ellipsoid(head, skinShade, [side * .224, -.028, .016], [.012, .031, .012], 12);
     ellipsoid(head, skin, [side * .224, -.035, .025], [.011, .018, .009], 10);
-    ellipsoid(head, whites, [side * .075, -.01, .176], [.037, .04, .017]);
-    ellipsoid(head, iris, [side * .072, -.014, .19], [.020, .026, .008], 14);
-    ellipsoid(head, eye, [side * .071, -.012, .198], [.011, .019, .005], 12);
-    ellipsoid(head, whites, [side * .071 - .005, -.003, .203], [.0045, .006, .003], 8);
+    ellipsoid(head, whites, [side * .075, -.01, .176], [.030, .012, .009]);
+    ellipsoid(head, iris, [side * .072, -.012, .184], [.011, .012, .004], 14);
+    ellipsoid(head, eye, [side * .071, -.012, .188], [.007, .009, .003], 12);
+
     curve(head, hair, [[side * .035, .062, .179], [side * .072, .072, .179], [side * .114, .057, .16]], .009, 8);
     curve(head, skinShade, [[side * .038, -.047, .174], [side * .075, -.058, .176], [side * .11, -.046, .165]], .003, 7);
   }
-  ellipsoid(head, skin, [0, -.062, .189], [.034, .047, .037]);
+  profile(head, skin, [[-.091, .02, .008, .183], [-.073, .029, .02, .197], [-.045, .02, .021, .19], [.025, .012, .01, .175]], 10);
   ellipsoid(head, skinShade, [-.016, -.086, .209], [.006, .003, .006], 8);
   ellipsoid(head, skinShade, [.016, -.086, .209], [.006, .003, .006], 8);
-  curve(head, skinShade, [[-.057, -.122, .156], [-.026, -.137, .166], [.014, -.14, .169], [.05, -.123, .16]], .004, 12);
-  curve(head, skin, [[-.03, -.149, .16], [0, -.154, .164], [.03, -.146, .161]], .005, 8);
+  curve(head, skinShade, [[-.048, -.133, .161], [-.022, -.135, .168], [.02, -.135, .168], [.048, -.133, .161]], .004, 12);
+  curve(head, skin, [[-.03, -.146, .16], [0, -.148, .166], [.03, -.146, .161]], .005, 8);
 
   // Hair cap with a lower nape, high forehead and shaped sideburns.
   const hairGeometry = new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
@@ -353,23 +357,43 @@ export function createAvatar(number: string, team: Team, name = ''): THREE.Group
     hand.rotation.y = side * -.12;
     arms.push(arm); forearms.push(forearm); hands.push(hand);
   }
+  // Broader shoulders and longer torso keep the reduced head seated in the collar.
+  // Stretch only above the hips so shoes and knee pivots keep their ground datum.
+  const hip = .79;
+  for (const child of root.children) {
+    if (child === head || legs.includes(child as THREE.Group)) continue;
+    if (child instanceof THREE.Mesh) {
+      const positions = child.geometry.attributes.position;
+      for (let i = 0; i < positions.count; i++) {
+        const y = positions.getY(i) + child.position.y;
+        if (y > hip) positions.setY(i, hip + (y - hip) * 1.17 - child.position.y);
+      }
+      child.geometry.computeVertexNormals();
+    } else if (arms.includes(child as THREE.Group)) child.position.y += .065;
+  }
+  // A continuous neck closes the collar-to-jaw join at the shared head datum.
+  profile(root, skin, [[1.36, .064, .06], [1.43, .059, .06], [1.46, .058, .057]], 12);
+  root.scale.x = 1.10;
   batchJoint(root);
+  root.traverse(object => {
+    if (object instanceof THREE.Mesh) { object.updateMatrix(); object.matrixAutoUpdate = false; }
+  });
   group.userData = { number, team, name, root, head, legs, shins, arms, forearms, hands, plate, phase: seed % 17, hairstyle, outfit };
   animateAvatar(group, 0, 0);
   return group;
 }
 
-export function animateAvatar(group: THREE.Group, time: number, moving: boolean | number) {
+export function animateAvatar(group: THREE.Group, time: number, moving: boolean | number, stridePhase?: number) {
   const data = group.userData;
   if (!data.legs) return;
   const amount = typeof moving === 'number' ? THREE.MathUtils.clamp(Number.isFinite(moving) ? moving : 0, 0, 1) : moving ? 1 : 0;
-  const phase = time * 8.5 + data.phase;
-  const step = Math.sin(phase), swing = step * amount * .53;
+  const phase = (stridePhase ?? time * 8.5) + data.phase;
+  const step = Math.sin(phase), swing = step * amount * .40;
   data.legs[0].rotation.x = swing;
   data.legs[1].rotation.x = -swing;
   for (let i = 0; i < 2; i++) {
     const cycle = i ? -step : step;
-    data.shins[i].rotation.x = Math.max(0, -cycle) * amount * .73;
+    data.shins[i].rotation.x = Math.max(0, -cycle) * amount * .65;
     data.arms[i].rotation.x = (i ? swing : -swing) * .75 - .08;
     data.arms[i].rotation.z = (i ? 1 : -1) * (.105 + Math.sin(time * 1.8 + data.phase) * .012 * (1 - amount));
     data.forearms[i].rotation.x = -.13 - amount * (.22 + Math.max(0, cycle) * .33);
@@ -378,7 +402,7 @@ export function animateAvatar(group: THREE.Group, time: number, moving: boolean 
   // Lift the hip just enough to keep the trailing sneaker clear of the floor.
   data.root.position.y = Math.abs(Math.cos(phase)) * amount * .018 + Math.sin(time * 2 + data.phase) * .003 * (1 - amount);
   data.root.rotation.y = step * amount * .035;
-  data.head.rotation.z = Math.sin(time * 1.4 + data.phase) * .016;
+  data.head.rotation.z = Math.sin(time * 1.4 + data.phase) * .006;
   data.head.rotation.y = Math.sin(time * .8 + data.phase) * .025 * (1 - amount);
 }
 

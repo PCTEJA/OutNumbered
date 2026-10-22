@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { MotionBuffer } from './motion';
 import { World } from './world';
 import { createAvatar, animateAvatar, updateAvatarNumber, disposeAvatar, createEquipment } from './avatar';
 import { loadCore, type GameCore } from './wasm';
@@ -13,7 +14,7 @@ const modeNames = { deathmatch: 'DEATHMATCH', team: 'TEAM DEATHMATCH', ctf: 'CAP
 const clamp = THREE.MathUtils.clamp;
 interface Options { name: string; mode: GameMode; map: MapId; room?: string; practice: boolean }
 interface Callbacks { onStatus: (text: string) => void; onPointerLock: (locked: boolean) => void; onDisconnect: (reason: string) => void }
-interface RenderPlayer { group: THREE.Group; state: PlayerState; moving: boolean }
+interface RenderPlayer { group: THREE.Group; state: PlayerState; motion: MotionBuffer; gait: number; gaitTime: number }
 
 export class Game {
   readonly scene = new THREE.Scene();
@@ -49,7 +50,13 @@ export class Game {
   private resolution = new AdaptiveResolution();
   private hudAt = 0;
   private shadowAt = 0;
-  private targetPosition = new THREE.Vector3();
+  private pingAt = -Infinity;
+  private pingPending?: number;
+  private pingMs?: number;
+  private pongAt = 0;
+  private snapshotAt = 0;
+  private timelineOffset = 0;
+  private frameAverage = 16.7;
   private markerPoint = new THREE.Vector3();
   private heldEquipment = 'binoculars';
   private equipmentReturnAt = 0;
@@ -98,7 +105,7 @@ export class Game {
     const signal = this.abort.signal;
     window.addEventListener('resize', () => this.resize(), { signal });
     document.addEventListener('keydown', e => this.keyDown(e), { signal });
-    document.addEventListener('keyup', e => { this.keys.delete(e.code); if (e.code === 'Tab') $('scoreboard').hidden = true; }, { signal });
+    document.addEventListener('keyup', e => { this.keys.delete(e.code); if (/^(Key[WASD]|ShiftLeft|ShiftRight)$/.test(e.code)) this.sendInput(); if (e.code === 'Tab') $('scoreboard').hidden = true; }, { signal });
     document.addEventListener('mousemove', e => {
       if (!this.playing || !this.controlling || (!document.pointerLockElement && !this.dragging)) return;
       this.yaw -= e.movementX * this.sensitivity * (this.zoomed ? .37 : 1);
@@ -156,6 +163,9 @@ export class Game {
     this.digits = '';
     this.drawDigits();
     this.firstState = true;
+    this.pingAt = -Infinity; this.pingPending = this.pingMs = undefined;
+    this.pongAt = this.snapshotAt = 0;
+    this.frameAverage = 16.7;
     this.roundShown = false;
     this.respawning = false;
     this.stamina = 100;
@@ -185,6 +195,11 @@ export class Game {
         if (message.type === 'state') {
           this.receiveState(message);
           if (!settled) { settled = true; clearTimeout(timeout); resolve(); }
+        }
+        if (message.type === 'pong' && message.sentAt === this.pingPending && message.sentAt !== undefined) {
+          this.pingMs = Math.round(performance.now() - message.sentAt);
+          this.pongAt = performance.now();
+          this.pingPending = undefined;
         }
         if (message.type === 'event') this.event(message);
       });
@@ -252,10 +267,11 @@ export class Game {
   private sendInput() { if (this.playing) this.send({ type: 'input', ...this.input(), yaw: this.yaw }); }
   private keyDown(e: KeyboardEvent) {
     if (!this.playing || document.querySelector('dialog[open]')) return;
-    if (e.code === 'Escape' && !document.pointerLockElement && this.controlling) { this.controlling = false; this.keys.clear(); this.callbacks.onPointerLock(false); return; }
+    if (e.code === 'Escape' && !document.pointerLockElement && this.controlling) { this.controlling = false; this.keys.clear(); this.sendInput(); this.callbacks.onPointerLock(false); return; }
     if (!this.controlling) return;
     if (['Tab', 'Space', 'Backspace', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code) || /^Digit|^Numpad/.test(e.code)) e.preventDefault();
     this.keys.add(e.code);
+    if (!e.repeat && /^(Key[WASD]|ShiftLeft|ShiftRight)$/.test(e.code)) this.sendInput();
     if (e.code === 'Tab') { if (this.state) this.drawScoreboard(this.state); $('scoreboard').hidden = false; return; }
     if (e.repeat || !this.state?.players.find(p => p.id === this.id)?.alive) return;
     if (/^[0-9]$/.test(e.key)) { if (this.digits.length < 4) { this.digits += e.key; this.drawDigits(); this.audio.play('key'); } return; }
@@ -322,6 +338,9 @@ export class Game {
   }
 
   private receiveState(state: StateMessage) {
+    this.snapshotAt = performance.now();
+    const offset = this.snapshotAt - state.serverTime;
+    this.timelineOffset = this.firstState ? offset : Math.min(offset, this.timelineOffset + 1);
     this.state = state;
     this.serverOffset = state.serverTime - Date.now();
     this.map = state.map;
@@ -360,11 +379,11 @@ export class Game {
         const group = createAvatar(player.number, player.team, player.name);
         group.position.set(player.x, 0, player.z);
         this.scene.add(group);
-        rendered = { group, state: player, moving: false };
+        rendered = { group, state: player, motion: new MotionBuffer(), gait: 0, gaitTime: 0 };
         this.players.set(player.id, rendered);
       }
       if (rendered.state.number !== player.number) updateAvatarNumber(rendered.group, player.number);
-      rendered.moving = Math.hypot(player.x - rendered.state.x, player.z - rendered.state.z) > .02;
+      rendered.motion.push({ x: player.x, z: player.z, yaw: player.yaw, time: state.serverTime }, !rendered.state.alive && player.alive);
       rendered.state = player;
       rendered.group.visible = player.alive;
     }
@@ -491,6 +510,7 @@ export class Game {
 
   private frame(time: number) {
     if (!this.playing || document.hidden) return;
+    this.frameAverage += (Math.min(time - this.lastFrame, 250) - this.frameAverage) * .05;
     if (this.quality === 'auto' && this.resolution.sample(time - this.lastFrame)) this.resize();
     const dt = Math.min((time - this.lastFrame) / 1000, .06);
     this.lastFrame = time;
@@ -535,11 +555,16 @@ export class Game {
     for (const rendered of this.players.values()) {
       const { group, state } = rendered;
       if (!state.alive) continue;
-      group.position.lerp(this.targetPosition.set(state.x, 0, state.z), 1 - Math.exp(-dt * 13));
-      let target = state.yaw + Math.PI;
-      const delta = Math.atan2(Math.sin(target - group.rotation.y), Math.cos(target - group.rotation.y));
-      group.rotation.y += delta * Math.min(1, dt * 12);
-      animateAvatar(group, seconds, rendered.moving);
+      const pose = rendered.motion.sample(time - this.timelineOffset - 100);
+      if (!pose) continue;
+      const distance = Math.hypot(pose.x - group.position.x, pose.z - group.position.z);
+      const speed = distance > 3 ? 0 : distance / Math.max(dt, .001);
+      group.position.set(pose.x, 0, pose.z);
+      group.rotation.y = pose.yaw + Math.PI;
+      rendered.gait += (Math.min(1, speed / 2.4) - rendered.gait) * (1 - Math.exp(-dt * 10));
+      rendered.gaitTime += Math.min(distance, .5) * 4.4 / 8.5;
+      animateAvatar(group, seconds, rendered.gait, rendered.gaitTime * 8.5);
+
     }
     for (const group of this.effects.values()) {
       if (group.userData.kind === 'smoke') { group.rotation.y += dt * .08; group.scale.setScalar(1 + Math.sin(seconds * .8) * .06); }
@@ -552,6 +577,11 @@ export class Game {
       flag.label.style.top = `${(-point.y * .5 + .5) * innerHeight}px`;
       flag.group.children[1].rotation.y = Math.sin(seconds * 2.8) * .13;
     }
+    if (time - this.pingAt >= 2000) {
+      this.pingAt = time;
+      this.pingPending = time;
+      if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ type: 'ping', sentAt: time }));
+    }
     if (time - this.networkAt >= 50) { this.sendInput(); this.networkAt = time; }
     if (time - this.worldAt > 600) {
       this.worldAt = time;
@@ -562,6 +592,12 @@ export class Game {
     }
     if (time - this.hudAt >= 100) {
       this.hudAt = time;
+      const stale = time - this.snapshotAt > 1000;
+      const ping = this.pingMs === undefined || time - this.pongAt > 6000 ? 'PING —' : `PING ${this.pingMs} ms`;
+      const stats = $('hud-performance');
+      stats.textContent = `${Math.round(1000 / this.frameAverage)} FPS · ${ping}${stale ? ' · CONNECTION STALLED' : ''}`;
+      stats.dataset.health = stale || (this.pingMs ?? 0) > 180 ? 'poor' : this.frameAverage > 25 || (this.pingMs ?? 0) > 90 ? 'fair' : 'good';
+      stats.title = `Frame ${this.frameAverage.toFixed(1)} ms · ${this.renderer.info.render.calls} draw calls · ${this.renderer.info.render.triangles.toLocaleString()} triangles · ${this.quality} · resolution ${Math.round(this.resolution.scale * 100)}%`;
       $('stamina-fill').style.width = `${Math.round(this.stamina)}%`;
       $('stamina-value').textContent = String(Math.round(this.stamina));
       if (this.photoUntil > time) $('photo-countdown').textContent = `${Math.ceil((this.photoUntil - time) / 1000)}s`;

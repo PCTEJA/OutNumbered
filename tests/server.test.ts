@@ -61,6 +61,18 @@ async function join(port: number, options: Partial<Extract<ClientMessage, { type
   return { client, ...welcome };
 }
 
+test('latency probes echo the client clock without changing match membership', async () => {
+  await withServer(async game => {
+    const { client, id } = await join(game.port, { practice: true });
+    client.send({ type: 'ping', sentAt: 1234.5 });
+    const pong = await client.wait('pong');
+    assert.equal(pong.sentAt, 1234.5);
+    assert.ok(Number.isFinite(pong.serverTime));
+    const state = await client.wait('state');
+    assert.ok(state.players.some(player => player.id === id));
+  });
+});
+
 function unobstructed(a: PlayerState, b: PlayerState) {
   // Independent sample-based sight check for choosing a legitimate integration-test shot.
   for (let t = 0; t <= 1; t += 0.01) {
