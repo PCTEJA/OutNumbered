@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "date": "2026-10-22",
+  "status": "concept-reference-not-integrated",
+  "generator": "built-in image_gen",
+  "specification": "CHARACTER-SKILL-SHEET.md",
+  "prompts": "PROMPTS.md",
+  "assets": [
+    {
+      "id": "01",
+      "title": "C01 · Cropped varsity",
+      "file": "01-character-cropped-varsity.png",
+      "purpose": "neutral-character-reference"
+    },
+    {
+      "id": "02",
+      "title": "C02 · Ponytail polo",
+      "file": "02-character-ponytail-polo.png",
+      "purpose": "neutral-character-reference"
+    },
+    {
+      "id": "03",
+      "title": "C03 · Curly hoodie",
+      "file": "03-character-curly-hoodie.png",
+      "purpose": "neutral-character-reference"
+    },
+    {
+      "id": "04",
+      "title": "C04 · Swept polo",
+      "file": "04-character-swept-polo.png",
+      "purpose": "neutral-character-reference"
+    },
+    {
+      "id": "05",
+      "title": "F01 · Team flags",
+      "file": "05-team-flags.png",
+      "purpose": "flag-reference"
+    },
+    {
+      "id": "06",
+      "title": "E01 · The Schoolyard",
+      "file": "06-schoolyard.png",
+      "purpose": "environment-kit-reference"
+    },
+    {
+      "id": "07",
+      "title": "E02 · Garden Party",
+      "file": "07-garden-party.png",
+      "purpose": "environment-kit-reference"
+    },
+    {
+      "id": "08",
+      "title": "E03 · After Hours",
+      "file": "08-after-hours.png",
+      "purpose": "environment-kit-reference"
+    },
+    {
+      "id": "09",
+      "title": "M01 · Movement and grips",
+      "file": "09-movement-and-grips.png",
+      "purpose": "animation-intent-only"
+    }
+  ]
+}

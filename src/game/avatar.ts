@@ -6,6 +6,11 @@ type Team = 'red' | 'blue';
 type Point = [number, number, number];
 const skinTones = [0xf1c5a7, 0xc98d68, 0xe4ae86, 0x98603e, 0x704530];
 const material = (color: number, roughness = 0.82) => new THREE.MeshStandardMaterial({ color, roughness });
+function fabric(color: number) {
+  const mat = material(color, .94);
+  mat.userData.fabric = true;
+  return mat;
+}
 
 function part(geometry: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D, x = 0, y = 0, z = 0) {
   const mesh = new THREE.Mesh(geometry, mat);
@@ -72,6 +77,10 @@ function batchJoint(root: THREE.Object3D) {
         const { r, g, b } = mesh.material.color;
         for (let i = 0; i < colors.length; i += 3) { colors[i] = r; colors[i + 1] = g; colors[i + 2] = b; }
         flat.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        flat.setAttribute('surfaceFinish', new THREE.Float32BufferAttribute(
+          new Float32Array(flat.attributes.position.count).fill(mesh.material.roughness), 1));
+        flat.setAttribute('fabricWeight', new THREE.Float32BufferAttribute(
+          new Float32Array(flat.attributes.position.count).fill(mesh.material.userData.fabric ? 1 : 0), 1));
         return flat;
       });
       const merged = mergeGeometries(geometries, false)!;
@@ -80,6 +89,20 @@ function batchJoint(root: THREE.Object3D) {
       let mat = palette.get(roughness);
       if (!mat) {
         mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness, vertexColors: true });
+        // Preserve each source surface's finish even after batching by joint.
+        mat.onBeforeCompile = shader => {
+          shader.vertexShader = 'attribute float surfaceFinish; attribute float fabricWeight; varying float vSurfaceFinish; varying float vFabricWeight; varying vec3 vFabricPosition;\n' + shader.vertexShader;
+          shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvSurfaceFinish = surfaceFinish; vFabricWeight = fabricWeight; vFabricPosition = position;');
+          shader.fragmentShader = 'varying float vSurfaceFinish; varying float vFabricWeight; varying vec3 vFabricPosition;\n' + shader.fragmentShader;
+          shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vSurfaceFinish;');
+          // Fade subpixel threads out instead of allowing a shimmering moire pattern.
+          shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+            vec3 thread = vFabricPosition * 1700.0;
+            float threadFade = 1.0 - smoothstep(0.8, 2.5, max(fwidth(thread.x), max(fwidth(thread.y), fwidth(thread.z))));
+            float weave = sin(thread.y) * (sin(thread.x) + sin(thread.z)) * 0.5;
+            diffuseColor.rgb *= 1.0 + weave * 0.065 * vFabricWeight * threadFade;`);
+        };
+        mat.customProgramCacheKey = () => 'avatar-surface-finish-v2';
         palette.set(roughness, mat);
       }
       part(merged, mat, joint);
@@ -147,17 +170,17 @@ export function createAvatar(number: string, team: Team, name = ''): THREE.Group
   const ponytail = hairstyle === 1;
   const skirtOutfit = ponytail && outfit === 2;
   const skinColor = skinTones[Math.floor(seed / 7) % skinTones.length];
-  const skin = material(skinColor, .72);
-  const skinShade = material(new THREE.Color(skinColor).multiplyScalar(.72).getHex());
+  const skin = material(skinColor, .62);
+  const skinShade = material(new THREE.Color(skinColor).multiplyScalar(.84).getHex(), .7);
   const nail = material(new THREE.Color(skinColor).lerp(new THREE.Color(0xffe2d0), .26).getHex(), .55);
-  const cloth = material(team === 'red' ? 0x8b3933 : 0x304e70);
-  const clothShade = material(team === 'red' ? 0x9f3a35 : 0x284d79);
-  const cream = material(0xcac5b6);
-  const pants = material(outfit === 1 ? 0x3a4b53 : 0x293e51);
+  const cloth = fabric(team === 'red' ? 0x8b3933 : 0x304e70);
+  const clothShade = fabric(team === 'red' ? 0x742e2b : 0x263e59);
+  const cream = fabric(0xcac5b6);
+  const pants = fabric(outfit === 1 ? 0x3a4b53 : 0x293e51);
   const seam = material(0x61717a);
   const rubber = material(0xf1e8d6, .9);
   const shoe = material(0x233340, .65);
-  const hair = material([0x32251f, 0x452b20, 0x211f26, 0x745035][Math.floor(seed / 3) % 4], .78);
+  const hair = material([0x32251f, 0x452b20, 0x211f26, 0x745035][Math.floor(seed / 3) % 4], .64);
   const hairHighlight = material(new THREE.Color(hair.color).lerp(new THREE.Color(0x91755c), .15).getHex());
   const eye = material(0x22272b, .38);
   const whites = material(0xfff8e9, .48);
@@ -234,9 +257,12 @@ export function createAvatar(number: string, team: Team, name = ''): THREE.Group
     ellipsoid(head, whites, [side * .075, -.01, .176], [.030, .012, .009]);
     ellipsoid(head, iris, [side * .072, -.012, .184], [.011, .012, .004], 14);
     ellipsoid(head, eye, [side * .071, -.012, .188], [.007, .009, .003], 12);
+    ellipsoid(head, whites, [side * .071 - .003, -.008, .191], [.003, .003, .0015], 8);
+    // Eyelids seat the eyes into the face instead of leaving floating eyeballs.
+    curve(head, skin, [[side * .045, -.009, .179], [side * .075, .004, .185], [side * .105, -.01, .172]], .0045, 8);
 
     curve(head, hair, [[side * .035, .062, .179], [side * .072, .072, .179], [side * .114, .057, .16]], .009, 8);
-    curve(head, skinShade, [[side * .038, -.047, .174], [side * .075, -.058, .176], [side * .11, -.046, .165]], .003, 7);
+    curve(head, skin, [[side * .045, -.022, .178], [side * .075, -.026, .183], [side * .103, -.021, .173]], .003, 7);
   }
   profile(head, skin, [[-.091, .02, .008, .183], [-.073, .029, .02, .197], [-.045, .02, .021, .19], [.025, .012, .01, .175]], 10);
   ellipsoid(head, skinShade, [-.016, -.086, .209], [.006, .003, .006], 8);
@@ -311,7 +337,7 @@ export function createAvatar(number: string, team: Team, name = ''): THREE.Group
     leg.name = side < 0 ? 'left-thigh' : 'right-thigh';
     leg.position.set(side * .096, .775, 0);
     root.add(leg);
-    profile(leg, skirtOutfit ? skin : pants, [[0, .075, .094], [-.055, .086, .096], [-.22, .061, .067], [-.335, .053, .055]], 16);
+    profile(leg, skirtOutfit ? skin : pants, [[0, .075, .094], [-.055, .086, .096], [-.22, .061, .067], [-.277, .058, .062], [-.295, .061, .065], [-.315, .054, .056], [-.335, .053, .055]], 16);
     if (!skirtOutfit) curve(leg, seam, [[side * .069, -.065, .041], [side * .065, -.2, .017], [side * .049, -.307, .021]], .003, 8);
     const shin = new THREE.Group();
     shin.name = side < 0 ? 'left-shin' : 'right-shin';
@@ -363,6 +389,12 @@ export function createAvatar(number: string, team: Team, name = ''): THREE.Group
   for (const child of root.children) {
     if (child === head || legs.includes(child as THREE.Group)) continue;
     if (child instanceof THREE.Mesh) {
+      // Deform in root coordinates: local Y is not vertical on rotated collars.
+      child.updateMatrix();
+      child.geometry.applyMatrix4(child.matrix);
+      child.position.set(0, 0, 0);
+      child.rotation.set(0, 0, 0);
+      child.scale.set(1, 1, 1);
       const positions = child.geometry.attributes.position;
       for (let i = 0; i < positions.count; i++) {
         const y = positions.getY(i) + child.position.y;

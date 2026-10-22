@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_WALLS, ZONES, type MapId } from '../shared/world';
 import type { ZoneBuild } from './zones/common';
+import { createSky } from './sky';
 
 type ZoneModule = { buildZone: () => ZoneBuild };
 const loaders: Record<MapId, () => Promise<ZoneModule>> = {
@@ -27,6 +28,7 @@ export class World {
     this.scene = scene;
     this.shell.name = 'always-loaded-landscape';
     scene.add(this.shell);
+    this.shell.add(createSky());
     scene.background = new THREE.Color(0xc5d9d8);
     scene.fog = new THREE.Fog(0xc5d9d8, 42, 145);
     this.skyLight = new THREE.HemisphereLight(0xf5f2d5, 0x698983, 2.05);

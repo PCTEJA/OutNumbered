@@ -171,6 +171,24 @@ test('hands have five digits and articulated limbs animate without invalid trans
   }
 });
 
+test('joint batching retains skin, eye and fabric finishes', t => {
+  const avatar = createAvatar('2634', 'blue');
+  t.after(() => disposeAvatar(avatar));
+  const finishes = new Set<number>();
+  let fabricVertices = 0;
+  for (const mesh of meshesOf(avatar)) {
+    const finish = mesh.geometry.getAttribute('surfaceFinish');
+    if (!finish) continue;
+    assert.equal(finish.count, mesh.geometry.attributes.position.count);
+    for (const value of finish.array) finishes.add(Math.round(value * 100));
+    const fabric = mesh.geometry.getAttribute('fabricWeight');
+    for (const value of fabric.array) fabricVertices += value;
+  }
+  assert.ok(finishes.has(62), 'skin finish survives batching');
+  assert.ok(finishes.has(38), 'eyes retain their glossy finish');
+  assert.ok(finishes.has(94) && fabricVertices > 0, 'cloth retains its matte finish and weave mask');
+});
+
 test('unloading one detailed character releases each resource once without invalidating another', () => {
   const first = createAvatar('2941', 'blue', 'Ada');
   const second = createAvatar('8702', 'blue', 'Ada');

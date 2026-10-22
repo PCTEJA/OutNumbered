@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { animateFlag, createFlagCloth } from './flag';
 import { MotionBuffer } from './motion';
 import { World } from './world';
 import { createAvatar, animateAvatar, updateAvatarNumber, disposeAvatar, createEquipment } from './avatar';
@@ -490,7 +491,7 @@ export class Game {
       if (!flag) {
         const group = new THREE.Group();
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(.035, .035, 2.7, 8), new THREE.MeshStandardMaterial({ color: 0xe1d9bc })); pole.position.y = 1.35; group.add(pole);
-        const cloth = new THREE.Mesh(new THREE.PlaneGeometry(1.1, .65, 8, 3), new THREE.MeshStandardMaterial({ color: team === 'red' ? 0xe95746 : 0x528bd7, side: THREE.DoubleSide })); cloth.position.set(.55, 2.25, 0); group.add(cloth);
+        const cloth = createFlagCloth(team); group.add(cloth);
         const base = new THREE.Mesh(new THREE.CylinderGeometry(.6, .7, .14, 20), new THREE.MeshStandardMaterial({ color: team === 'red' ? 0xe95746 : 0x528bd7 })); base.position.y = .07; group.add(base);
         const label = document.createElement('div'); label.className = 'flag-marker'; label.style.borderColor = team === 'red' ? '#e85f54' : '#5894d3'; $('game-hud').append(label);
         this.scene.add(group);
@@ -575,7 +576,7 @@ export class Game {
       flag.label.hidden = point.z > 1 || Math.abs(point.x) > 1 || Math.abs(point.y) > 1 || !flag.group.userData.markerVisible;
       flag.label.style.left = `${(point.x * .5 + .5) * innerWidth}px`;
       flag.label.style.top = `${(-point.y * .5 + .5) * innerHeight}px`;
-      flag.group.children[1].rotation.y = Math.sin(seconds * 2.8) * .13;
+      animateFlag(flag.group.children[1] as THREE.Mesh, seconds);
     }
     if (time - this.pingAt >= 2000) {
       this.pingAt = time;
