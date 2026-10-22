@@ -137,6 +137,11 @@ export class Game {
     document.addEventListener('mousedown', e => {
       if (e.target !== this.renderer.domElement && !(e.target instanceof Element && e.target.closest('.touch-look'))) return;
       if (!this.playing || (e.button !== 0 && e.button !== 2)) return;
+      // A click that resumes mouse control should not also spend a grenade.
+      if (e.button === 0 && this.controlling && !this.touch.enabled) {
+        e.preventDefault();
+        this.action('KeyG');
+      }
       if (document.pointerLockElement !== this.renderer.domElement) this.capture(true);
       this.mouseX = e.clientX; this.mouseY = e.clientY;
       this.dragging = true;

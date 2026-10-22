@@ -139,7 +139,7 @@ Rooms currently live in server memory. Vercel can route different clients to dif
 | E | Photograph your view; photo lasts five seconds |
 | Q | Cycle flash, smoke, and distract grenades |
 | Mouse wheel | Cycle grenades forward (down) or backward (up), wrapping at either end |
-| G | Throw selected grenade |
+| G / left mouse | Throw selected grenade |
 | Tab (hold) | Scoreboard |
 | Esc | Release mouse / pause menu |
 
