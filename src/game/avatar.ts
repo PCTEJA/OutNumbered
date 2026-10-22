@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { sculptFace, sculptLock } from './character-sculpt';
+import { cloneCharacterModel } from './character-model';
 export { createEquipment } from './equipment';
 
 type Team = 'red' | 'blue';
@@ -181,6 +182,23 @@ function createHand(parent: THREE.Object3D, skin: THREE.Material, nail: THREE.Ma
 
 /** Original stylized cast, with a +Z face and the gameplay forehead at 1.67m. */
 export function createAvatar(number: string, team: Team, name = ''): THREE.Group {
+  const imported = cloneCharacterModel();
+  if (imported) {
+    const group = new THREE.Group();
+    group.name = name;
+    group.add(imported);
+    const head = new THREE.Group();
+    head.position.y = 1.535;
+    group.add(head);
+    const socket = new THREE.Group();
+    socket.name = 'NumberSocket';
+    socket.position.set(0, 1.67, .19);
+    group.add(socket);
+    part(new THREE.BoxGeometry(.45, .18, .018), material(team === 'red' ? 0xbd3939 : 0x356bd0), socket, 0, 0, -.011);
+    const plate = part(new THREE.PlaneGeometry(.43, .16), new THREE.MeshBasicMaterial({ map: numberTexture(number), side: THREE.FrontSide, toneMapped: false }), socket);
+    group.userData = { number, team, name, root: imported, head, plate, imported: true, phase: identitySeed(name || number) % 17 };
+    return group;
+  }
   const group = new THREE.Group();
   group.name = name;
   // A respawn replaces the number, not the person's appearance.
@@ -467,6 +485,12 @@ export function createAvatar(number: string, team: Team, name = ''): THREE.Group
 
 export function animateAvatar(group: THREE.Group, time: number, moving: boolean | number, stridePhase?: number) {
   const data = group.userData;
+  if (data.imported) {
+    const amount = typeof moving === 'number' ? THREE.MathUtils.clamp(Number.isFinite(moving) ? moving : 0, 0, 1) : moving ? 1 : 0;
+    // This source is unrigged. Keep the readable target fixed while the body bobs.
+    data.root.position.y = Math.abs(Math.sin((stridePhase ?? time * 8.5) + data.phase)) * amount * .012;
+    return;
+  }
   if (!data.legs) return;
   const amount = typeof moving === 'number' ? THREE.MathUtils.clamp(Number.isFinite(moving) ? moving : 0, 0, 1) : moving ? 1 : 0;
   const phase = (stridePhase ?? time * 8.5) + data.phase;
@@ -504,7 +528,11 @@ export function disposeAvatar(group: THREE.Group) {
   const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
   group.traverse(object => {
     if (!(object instanceof THREE.Mesh)) return;
-    geometries.add(object.geometry);
+    if (!object.userData.sharedCharacterGeometry) geometries.add(object.geometry);
+    if (object.userData.sharedCharacterGeometry) {
+      for (const mat of Array.isArray(object.material) ? object.material : [object.material]) mat.dispose();
+      return;
+    }
     for (const mat of Array.isArray(object.material) ? object.material : [object.material]) materials.add(mat);
   });
   geometries.forEach(geometry => geometry.dispose());

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createAvatar, animateAvatar, createEquipment, disposeAvatar } from './game/avatar';
 import './character-studio.css';
+import { loadCharacterModel } from './game/character-model';
 
 type View = 'body' | 'face' | 'hands' | 'portrait';
 type Team = 'red' | 'blue';
@@ -28,14 +29,11 @@ app.innerHTML = `
       <fieldset class="control-group" data-character-setting>
         <legend>Character</legend>
         <div class="variants" data-control="number">
-          <button data-value="2634" aria-pressed="true"><span class="variant-dot" style="--swatch:#dcaa87"></span>Swept polo</button>
-          <button data-value="2928" aria-pressed="false"><span class="variant-dot" style="--swatch:#b98466"></span>Varsity</button>
-          <button data-value="4875" aria-pressed="false"><span class="variant-dot" style="--swatch:#916347"></span>Curly hoodie</button>
-          <button data-value="3141" aria-pressed="false"><span class="variant-dot" style="--swatch:#d5a185"></span>Ponytail polo</button>
+          <button data-value="2634" aria-pressed="true"><span class="variant-dot" style="--swatch:#dcaa87"></span>C01F Varsity</button>
         </div>
       </fieldset>
       <fieldset class="control-group" data-character-setting>
-        <legend>Team colours</legend>
+        <legend>Team marker</legend>
         <div class="segmented" data-control="team">
           <button data-value="blue" aria-pressed="true"><span class="team-dot"></span>Blue</button>
           <button data-value="red" aria-pressed="false"><span class="team-dot red"></span>Red</button>
@@ -45,7 +43,7 @@ app.innerHTML = `
         <legend>Movement</legend>
         <div class="segmented" data-control="motion">
           <button data-value="idle" aria-pressed="true">Standing</button>
-          <button data-value="walk" aria-pressed="false">Walking</button>
+          <button data-value="walk" aria-pressed="false">Moving</button>
         </div>
       </fieldset>
       <fieldset class="control-group" data-equipment-setting hidden>
@@ -156,6 +154,7 @@ let mode = 'character';
 let wireframe = false;
 let view: View = 'body';
 let turntableAngle = 0;
+await loadCharacterModel();
 let subject = createAvatar(number, team);
 scene.add(subject);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
