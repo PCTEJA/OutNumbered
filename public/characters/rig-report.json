@@ -1,0 +1,22 @@
+[
+  {
+    "variant": "c01",
+    "triangles": 22488,
+    "bones": 17,
+    "clips": [
+      "Idle",
+      "Walk",
+      "Run"
+    ]
+  },
+  {
+    "variant": "c01f",
+    "triangles": 22499,
+    "bones": 17,
+    "clips": [
+      "Idle",
+      "Walk",
+      "Run"
+    ]
+  }
+]

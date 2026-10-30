@@ -95,7 +95,7 @@ npm run dev
 
 Open **http://localhost:5173**. The command builds the WASM core if needed and runs the website and match server together. Pick **Practice with bots** for an immediate match against five bots. Play with a keyboard and mouse or the on-screen touch controls.
 
-Choose **Characters** in the lobby, or open **http://localhost:5173/characters.html**, to inspect the playable cast. The studio includes four hairstyles, varsity jackets, hoodies, polos, a pleated skirt variant, five-digit hands, articulated walking, team colors, and close-up equipment grips. Drag to rotate and use **Face** or **Hands** to inspect the details. The studio uses the same models as matches and is also included in the production build.
+Choose **Characters** in the lobby, or open **http://localhost:5173/characters.html**, to inspect the playable cast. The studio loads the two optimized varsity GLBs with Blender-authored Idle, Walk and Run clips on a shared humanoid rig. Drag to rotate and use **Face** or **Hands** to inspect the details. The same skinned models run in matches, with distance-based locomotion, a fixed gameplay number surface and team-color ground rings. Procedural avatars remain available while loading or if a model fails to load. See [the Blender pipeline and editable projects](docs/animation/README.md).
 
 For a compiled build:
 

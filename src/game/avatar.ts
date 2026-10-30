@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { sculptFace, sculptLock } from './character-sculpt';
+import { loadCharacterRig, animateCharacterRig, disposeCharacterRig } from './character-rig';
 export { createEquipment } from './equipment';
 
 type Team = 'red' | 'blue';
@@ -462,13 +463,15 @@ export function createAvatar(number: string, team: Team, name = ''): THREE.Group
   });
   group.userData = { number, team, name, root, head, legs, shins, arms, forearms, hands, plate, phase: seed % 17, hairstyle, outfit };
   animateAvatar(group, 0, 0);
+  loadCharacterRig(group, ponytail);
   return group;
 }
 
-export function animateAvatar(group: THREE.Group, time: number, moving: boolean | number, stridePhase?: number) {
+export function animateAvatar(group: THREE.Group, time: number, moving: boolean | number, stridePhase?: number, speed?: number) {
   const data = group.userData;
   if (!data.legs) return;
   const amount = typeof moving === 'number' ? THREE.MathUtils.clamp(Number.isFinite(moving) ? moving : 0, 0, 1) : moving ? 1 : 0;
+  if (animateCharacterRig(group, time, amount, stridePhase, speed)) return;
   const phase = (stridePhase ?? time * 8.5) + data.phase;
   const step = Math.sin(phase), swing = step * amount * .40;
   data.legs[0].rotation.x = swing;
@@ -501,9 +504,12 @@ export function updateAvatarNumber(group: THREE.Group, number: string) {
 }
 
 export function disposeAvatar(group: THREE.Group) {
+  group.userData.disposed = true;
+  disposeCharacterRig(group);
   const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
   group.traverse(object => {
     if (!(object instanceof THREE.Mesh)) return;
+    if (object instanceof THREE.SkinnedMesh) object.skeleton.dispose();
     geometries.add(object.geometry);
     for (const mat of Array.isArray(object.material) ? object.material : [object.material]) materials.add(mat);
   });

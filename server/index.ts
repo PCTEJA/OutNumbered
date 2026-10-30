@@ -177,9 +177,17 @@ function blocked(x: number, z: number) {
   return WORLD_WALLS.some(w => w.h > 0.3 && x > w.x - w.w / 2 - PLAYER_RADIUS && x < w.x + w.w / 2 + PLAYER_RADIUS && z > w.z - w.d / 2 - PLAYER_RADIUS && z < w.z + w.d / 2 + PLAYER_RADIUS);
 }
 
-function move(room: Room, p: Player, dx: number, dz: number) {
-  p.x = clamp(room.core.clipX(p.x, p.z, dx, PLAYER_RADIUS), WORLD_LIMITS.minX + PLAYER_RADIUS, WORLD_LIMITS.maxX - PLAYER_RADIUS);
-  p.z = clamp(room.core.clipZ(p.x, p.z, dz, PLAYER_RADIUS), WORLD_LIMITS.minZ + PLAYER_RADIUS, WORLD_LIMITS.maxZ - PLAYER_RADIUS);
+export function move(room: Room, p: Player, dx: number, dz: number) {
+  const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / .15));
+  for (let step = 0; step < steps; step++) {
+    const clear = (x: number, z: number) => [...room.players.values()].every(other =>
+      other === p || !other.alive || Math.hypot(x - other.x, z - other.z) >= PLAYER_RADIUS * 2 ||
+      Math.hypot(x - other.x, z - other.z) > Math.hypot(p.x - other.x, p.z - other.z));
+    const x = clamp(room.core.clipX(p.x, p.z, dx / steps, PLAYER_RADIUS), WORLD_LIMITS.minX + PLAYER_RADIUS, WORLD_LIMITS.maxX - PLAYER_RADIUS);
+    if (clear(x, p.z)) p.x = x;
+    const z = clamp(room.core.clipZ(p.x, p.z, dz / steps, PLAYER_RADIUS), WORLD_LIMITS.minZ + PLAYER_RADIUS, WORLD_LIMITS.maxZ - PLAYER_RADIUS);
+    if (clear(p.x, z)) p.z = z;
+  }
 }
 
 function uniqueNumber(room: Room) {

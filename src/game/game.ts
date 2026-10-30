@@ -605,7 +605,16 @@ export class Game {
       const norm = Math.max(1, Math.hypot(forward, strafe));
       const dx = (-Math.sin(this.yaw) * forward + Math.cos(this.yaw) * strafe) / norm * speed * dt;
       const dz = (-Math.cos(this.yaw) * forward - Math.sin(this.yaw) * strafe) / norm * speed * dt;
-      this.position = this.core.move(this.position.x, this.position.z, dx, dz);
+      const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / .15));
+      const clear = (x: number, z: number) => [...this.players.values()].every(other =>
+        !other.state.alive || Math.hypot(x - other.group.position.x, z - other.group.position.z) >= .76 ||
+        Math.hypot(x - other.group.position.x, z - other.group.position.z) > Math.hypot(this.position.x - other.group.position.x, this.position.z - other.group.position.z));
+      for (let step = 0; step < steps; step++) {
+        const xMove = this.core.move(this.position.x, this.position.z, dx / steps, 0);
+        if (clear(xMove.x, xMove.z)) this.position = xMove;
+        const zMove = this.core.move(this.position.x, this.position.z, 0, dz / steps);
+        if (clear(zMove.x, zMove.z)) this.position = zMove;
+      }
       this.position.x = clamp(this.position.x, WORLD_LIMITS.minX + .38, WORLD_LIMITS.maxX - .38);
       this.position.z = clamp(this.position.z, WORLD_LIMITS.minZ + .38, WORLD_LIMITS.maxZ - .38);
       this.stamina = this.core.stamina(this.stamina, moving, sprint, dt);
@@ -635,7 +644,7 @@ export class Game {
       group.rotation.y = pose.yaw + Math.PI;
       rendered.gait += (Math.min(1, speed / 2.4) - rendered.gait) * (1 - Math.exp(-dt * 10));
       rendered.gaitTime += Math.min(distance, .5) * 4.4 / 8.5;
-      animateAvatar(group, seconds, rendered.gait, rendered.gaitTime * 8.5);
+      animateAvatar(group, seconds, rendered.gait, rendered.gaitTime * 8.5, speed);
 
     }
     for (const group of this.effects.values()) {

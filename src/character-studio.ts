@@ -28,10 +28,8 @@ app.innerHTML = `
       <fieldset class="control-group" data-character-setting>
         <legend>Character</legend>
         <div class="variants" data-control="number">
-          <button data-value="2634" aria-pressed="true"><span class="variant-dot" style="--swatch:#dcaa87"></span>Swept polo</button>
-          <button data-value="2928" aria-pressed="false"><span class="variant-dot" style="--swatch:#b98466"></span>Varsity</button>
-          <button data-value="4875" aria-pressed="false"><span class="variant-dot" style="--swatch:#916347"></span>Curly hoodie</button>
-          <button data-value="3141" aria-pressed="false"><span class="variant-dot" style="--swatch:#d5a185"></span>Ponytail polo</button>
+          <button data-value="2634" aria-pressed="true"><span class="variant-dot" style="--swatch:#dcaa87"></span>Varsity</button>
+          <button data-value="3141" aria-pressed="false"><span class="variant-dot" style="--swatch:#d5a185"></span>Ponytail varsity</button>
         </div>
       </fieldset>
       <fieldset class="control-group" data-character-setting>
@@ -46,6 +44,7 @@ app.innerHTML = `
         <div class="segmented" data-control="motion">
           <button data-value="idle" aria-pressed="true">Standing</button>
           <button data-value="walk" aria-pressed="false">Walking</button>
+          <button data-value="run" aria-pressed="false">Running</button>
         </div>
       </fieldset>
       <fieldset class="control-group" data-equipment-setting hidden>
@@ -151,6 +150,7 @@ scene.add(ring);
 let number = '2634';
 let team: Team = 'blue';
 let walking = false;
+let running = false;
 let equipment = 'binoculars';
 let mode = 'character';
 let wireframe = false;
@@ -172,6 +172,7 @@ function setPressed(control: string, value: string) {
 function frame(instant = false) {
   const numberSocket = subject.getObjectByName('NumberSocket');
   if (numberSocket) numberSocket.visible = view !== 'portrait';
+  if (subject.userData.plate) subject.userData.plate.visible = view !== 'portrait';
   subject.updateMatrixWorld(true);
   if (mode === 'equipment') {
     // Equipment points along -Z; the +Z camera shows the player's side of the grip.
@@ -207,12 +208,12 @@ function frame(instant = false) {
 
 function updateLabels() {
   app.querySelector('#subject-title')!.textContent = mode === 'character' ? `Character ${number}` : equipment === 'flash' ? 'Flash canister' : equipment === 'smoke' ? 'Smoke canister' : equipment[0].toUpperCase() + equipment.slice(1);
-  app.querySelector('#subject-caption')!.textContent = mode === 'character' ? `${team === 'blue' ? 'Blue' : 'Red'} team · ${view === 'portrait' ? 'Portrait · number hidden for inspection' : walking ? 'Walking' : 'Standing'}` : 'Hands & equipment · Grip detail';
+  app.querySelector('#subject-caption')!.textContent = mode === 'character' ? `${team === 'blue' ? 'Blue' : 'Red'} team · ${view === 'portrait' ? 'Portrait · number hidden for inspection' : running ? 'Running' : walking ? 'Walking' : 'Standing'}` : 'Hands & equipment · Grip detail';
 }
 
 function inspectSubject() {
   let triangles = 0, draws = 0;
-  subject.traverse(object => {
+  subject.traverseVisible(object => {
     if (!(object instanceof THREE.Mesh)) return;
     draws++;
     triangles += (object.geometry.index?.count ?? object.geometry.attributes.position.count) / 3;
@@ -259,12 +260,14 @@ app.querySelectorAll<HTMLButtonElement>('[data-control] button').forEach(button 
       updateLabels();
       if (view === 'hands' && mode === 'character') {
         walking = false;
+        running = false;
         setPressed('motion', 'idle');
         updateLabels();
       }
       frame();
     } else if (control === 'motion') {
       walking = value === 'walk';
+      running = value === 'run';
       updateLabels();
     } else {
       if (control === 'number') number = value;
@@ -300,7 +303,10 @@ const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const delta = Math.min(clock.getDelta(), 0.05);
   const time = clock.elapsedTime;
-  if (mode === 'character') animateAvatar(subject, reducedMotion.matches && !walking ? 0 : time, walking ? 0.8 : 0);
+  if (mode === 'character') {
+    animateAvatar(subject, reducedMotion.matches && !walking && !running ? 0 : time, running ? 1 : walking ? 0.8 : 0);
+    if (subject.userData.motionRig && !subject.userData.rigInspected) { inspectSubject(); subject.userData.rigInspected = true; }
+  }
   if (framing) {
     const alpha = 1 - Math.exp(-delta * 10);
     camera.position.lerp(targetPosition, alpha);
