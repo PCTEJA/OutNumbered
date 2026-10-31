@@ -49,19 +49,22 @@ export function createFlagCloth(team: 'red' | 'blue') {
 /** Reference F01: machined pole, safe finial, pinned hoist collars and weighted foot. */
 export function createFlagHardware() {
   const group = new THREE.Group();
+  const base = new THREE.Group();
+  base.name = 'flag-base';
+  group.add(base);
   const metal = new THREE.MeshStandardMaterial({ color: 0xc9bea3, metalness: .72, roughness: .32 });
   const rubber = new THREE.MeshStandardMaterial({ color: 0x292c2c, roughness: .9 });
-  const add = (geometry: THREE.BufferGeometry, y: number, mat = metal) => {
+  const add = (geometry: THREE.BufferGeometry, y: number, mat = metal, parent = group) => {
     const mesh = new THREE.Mesh(geometry, mat);
     mesh.position.y = y;
     mesh.castShadow = mesh.receiveShadow = true;
-    group.add(mesh);
+    parent.add(mesh);
   };
   add(new THREE.CylinderGeometry(.035, .035, 2.7, 16), 1.35);
   add(new THREE.SphereGeometry(.052, 12, 8), 2.72);
-  add(new THREE.CylinderGeometry(.6, .7, .14, 32), .07);
-  add(new THREE.CylinderGeometry(.695, .695, .018, 32), .012, rubber);
-  add(new THREE.CylinderGeometry(.074, .09, .10, 16), .19);
+  add(new THREE.CylinderGeometry(.6, .7, .14, 32), .07, metal, base);
+  add(new THREE.CylinderGeometry(.695, .695, .018, 32), .012, rubber, base);
+  add(new THREE.CylinderGeometry(.074, .09, .10, 16), .19, metal, base);
   for (const y of [1.945, 2.555]) add(new THREE.CylinderGeometry(.046, .046, .07, 16), y);
-  return group;
+  return { group, base };
 }

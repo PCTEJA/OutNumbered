@@ -48,7 +48,7 @@ export class Game {
   private keys = new Set<string>();
   private players = new Map<string, RenderPlayer>();
   private effects = new Map<string, THREE.Group>();
-  private flags = new Map<string, { group: THREE.Group; label: HTMLElement }>();
+  private flags = new Map<string, { group: THREE.Group; base: THREE.Group; label: HTMLElement }>();
   private particles: { mesh: THREE.Mesh; velocity: THREE.Vector3; until: number }[] = [];
   private equipment = new THREE.Group();
   private equipmentCache = new Map<string, THREE.Group>();
@@ -567,14 +567,16 @@ export class Game {
       let flag = this.flags.get(team);
       if (!flag) {
         const group = new THREE.Group();
-        group.add(createFlagHardware());
+        const hardware = createFlagHardware();
+        group.add(hardware.group);
         const cloth = createFlagCloth(team); group.add(cloth);
 
         const label = document.createElement('div'); label.className = 'flag-marker'; label.style.borderColor = team === 'red' ? '#e85f54' : '#5894d3'; $('game-hud').append(label);
         this.scene.add(group);
-        flag = { group, label }; this.flags.set(team, flag);
+        flag = { group, base: hardware.base, label }; this.flags.set(team, flag);
       }
       const data = state.flags[team];
+      flag.base.visible = !data.carrierId;
       flag.group.position.set(data.x, data.carrierId ? .5 : 0, data.z);
       flag.group.visible = data.carrierId !== this.id;
       const ownTeam = state.players.find(p => p.id === this.id)?.team;
