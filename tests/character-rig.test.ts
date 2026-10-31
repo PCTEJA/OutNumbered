@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
-import { createHeadAnchor, animateCharacterRig } from '../src/game/character-rig.js';
+import { createHeadAnchor, animateCharacterRig, placeNumberOnStrap, anchorNumberStrap } from '../src/game/character-rig.js';
 
 for (const variant of ['c01', 'c01f']) test(`${variant} GLB has bounded game geometry, shared rig and complete looping clips`, () => {
   const bytes = readFileSync(new URL(`../public/characters/${variant}-animated.glb`, import.meta.url));
@@ -65,12 +65,13 @@ for (const variant of ['c01', 'c01f']) test(`${variant} exported clips drive ind
   const bytes = readFileSync(new URL(`../public/characters/${variant}-animated.glb`, import.meta.url));
   const gltf = await loader.parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
   const model = clone(gltf.scene);
+  anchorNumberStrap(model, variant === 'c01f');
   const original = gltf.scene.getObjectByName('Thigh_L')!;
   const originalRotation = original.quaternion.clone();
   const mixer = new THREE.AnimationMixer(model);
   const anchorHead = createHeadAnchor(model);
   const plate = new THREE.Mesh(new THREE.PlaneGeometry(.43, .16), new THREE.MeshBasicMaterial({ side: THREE.FrontSide }));
-  plate.position.set(0, 1.67, .205);
+  placeNumberOnStrap(plate, variant === 'c01f');
   model.add(plate);
   for (const clip of gltf.animations) {
     mixer.stopAllAction();
@@ -94,9 +95,9 @@ for (const variant of ['c01', 'c01f']) test(`${variant} exported clips drive ind
       const size = box.getSize(new THREE.Vector3());
       assert.ok(size.x < 1.25 && size.y < 2.1 && size.z < 1.1, `${clip.name} has excessive deformation: ${size.toArray()}`);
       assert.ok(box.min.y > -.12 && box.min.y < .20, `${clip.name} must remain near the ground: ${box.min.y}`);
-      for (const x of [-.16, -.05, .05, .16]) {
-        const ray = new THREE.Raycaster(new THREE.Vector3(x, 1.67, 2), new THREE.Vector3(0, 0, -1));
-        assert.equal(ray.intersectObject(model, true)[0]?.object, plate, `${clip.name} must leave all four digits unobstructed`);
+      for (const x of [-.055, -.018, .018, .055]) {
+        const ray = new THREE.Raycaster(new THREE.Vector3(x, plate.position.y, 2), new THREE.Vector3(0, 0, -1));
+        assert.ok(ray.intersectObject(model, true)[0]?.object === plate, `${clip.name} must leave all four digits unobstructed`);
       }
     }
   }
@@ -118,3 +119,4 @@ for (const variant of ['c01', 'c01f']) test(`${variant} exported clips drive ind
   assert.equal(rig.idle.getEffectiveWeight(), 1, 'stopping returns to idle');
   mixer.stopAllAction(); mixer.uncacheRoot(model);
 });
+

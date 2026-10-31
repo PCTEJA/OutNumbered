@@ -137,11 +137,6 @@ function numberTexture(number: string): THREE.CanvasTexture {
   canvas.width = 512;
   canvas.height = 192;
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#fff1be';
-  ctx.fillRect(0, 0, 512, 192);
-  ctx.strokeStyle = '#c6a76e';
-  ctx.lineWidth = 8;
-  ctx.strokeRect(4, 4, 504, 184);
   ctx.fillStyle = '#242c2a';
   ctx.font = '900 150px Arial, sans-serif';
   ctx.textBaseline = 'middle';
@@ -360,7 +355,7 @@ export function createAvatar(number: string, team: Team, name = ''): THREE.Group
   numberSocket.scale.set(1 / (head.scale.x * 1.10), 1 / .72, 1 / .78);
   head.add(numberSocket);
   part(new THREE.BoxGeometry(.438, .169, .018), cream, numberSocket, 0, 0, -.01);
-  const plate = part(new THREE.PlaneGeometry(.43, .16), new THREE.MeshBasicMaterial({ map: numberTexture(number), side: THREE.FrontSide, toneMapped: false }), numberSocket);
+  const plate = part(new THREE.PlaneGeometry(.43, .16), new THREE.MeshBasicMaterial({ map: numberTexture(number), transparent: true, side: THREE.FrontSide, toneMapped: false }), numberSocket);
   plate.userData.keepSeparate = true;
 
   const legs: THREE.Group[] = [], shins: THREE.Group[] = [], arms: THREE.Group[] = [], forearms: THREE.Group[] = [], hands: THREE.Group[] = [];

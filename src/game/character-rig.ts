@@ -4,6 +4,30 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 
 const assets = new Map<string, Promise<GLTF>>();
 const loader = new GLTFLoader();
+/** Inset digits on the existing white forehead strap, with a small depth clearance. */
+export function placeNumberOnStrap(plate: THREE.Mesh, female: boolean) {
+  plate.matrixAutoUpdate = true;
+  plate.position.set(female ? 0 : -.001, female ? 1.6875 : 1.700, female ? .1335 : .1205);
+  plate.rotation.set(0, 0, 0);
+  plate.scale.set((female ? .158 : .140) / .43, (female ? .060 : .052) / .16, 1);
+}
+
+/** Keep the strap and surrounding forehead on the anchored head during motion. */
+export function anchorNumberStrap(model: THREE.Object3D, female: boolean) {
+  model.traverse(object => {
+    if (!(object instanceof THREE.SkinnedMesh)) return;
+    const head = object.skeleton.bones.findIndex(bone => bone.name === 'Head');
+    if (head < 0) return;
+    const { position, skinIndex, skinWeight } = object.geometry.attributes;
+    for (let i = 0; i < position.count; i++) {
+      const y = position.getY(i);
+      if (y < (female ? 1.64 : 1.66)) continue;
+      skinIndex.setXYZW(i, head, 0, 0, 0);
+      skinWeight.setXYZW(i, 1, 0, 0, 0);
+    }
+    skinIndex.needsUpdate = skinWeight.needsUpdate = true;
+  });
+}
 type MotionRig = { mixer: THREE.AnimationMixer; idle: THREE.AnimationAction; walk: THREE.AnimationAction; run: THREE.AnimationAction; anchorHead: () => void; lastTime?: number };
 
 /** Counter torso motion so the imported forehead board and gameplay digits agree. */
@@ -50,6 +74,7 @@ export function loadCharacterRig(group: THREE.Group, female: boolean) {
       }
       object.castShadow = true; object.receiveShadow = false;
     });
+    anchorNumberStrap(model, female);
     const mixer = new THREE.AnimationMixer(model);
     const action = (name: string) => {
       const clip = gltf.animations.find(c => c.name === name);
@@ -61,8 +86,7 @@ export function loadCharacterRig(group: THREE.Group, female: boolean) {
     group.userData.root.visible = false;
     const plate = group.userData.plate as THREE.Mesh;
     group.add(plate);
-    plate.matrixAutoUpdate = true;
-    plate.position.set(0, 1.67, .205); plate.rotation.set(0, 0, 0); plate.scale.set(1, 1, 1);
+    placeNumberOnStrap(plate, female);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(.27, .018, 6, 32), new THREE.MeshBasicMaterial({ color: group.userData.team === 'red' ? 0xe76760 : 0x69bfff }));
     ring.rotation.x = -Math.PI / 2; ring.position.y = .025;
     group.add(model, ring);
