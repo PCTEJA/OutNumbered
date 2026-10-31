@@ -57,3 +57,12 @@ export function turnTowards(yaw: number, target: number, dt: number) {
   const delta = Math.atan2(Math.sin(target - yaw), Math.cos(target - yaw));
   return yaw + Math.max(-dt * 3.5, Math.min(dt * 3.5, delta));
 }
+
+/** Limit changes in travel velocity, including braking and direction changes. */
+export function steerVelocity(current: Waypoint, desired: Waypoint, dt: number): Waypoint {
+  const dx = desired.x - current.x, dz = desired.z - current.z;
+  const change = Math.hypot(dx, dz);
+  const rate = Math.hypot(desired.x, desired.z) < Math.hypot(current.x, current.z) ? 6 : 4;
+  const blend = change > 0 ? Math.min(1, rate * dt / change) : 0;
+  return { x: current.x + dx * blend, z: current.z + dz * blend };
+}

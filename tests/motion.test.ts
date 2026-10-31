@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MotionBuffer } from '../src/game/motion';
-import { findPath, walkableSegment, turnTowards } from '../server/navigation';
+import { findPath, walkableSegment, turnTowards, steerVelocity } from '../server/navigation';
 import { SPAWNS } from '../src/shared/world';
 
 test('snapshot interpolation holds during stalls, takes the shortest turn and resets on teleport', () => {
@@ -32,4 +32,21 @@ test('bot steering is bounded and frame-rate independent across angle wrapping',
   for (let i = 0; i < 20; i++) yaw = turnTowards(yaw, 1, .05);
   assert.ok(Math.abs(yaw - 1) < 1e-8);
   assert.ok(Math.abs(turnTowards(3.1, -3.1, .05) - 3.1) < .1);
+});
+
+
+test('bot travel accelerates gradually, brakes to rest and cannot reverse instantly', () => {
+  const start = steerVelocity({ x: 0, z: 0 }, { x: 2.4, z: 0 }, .05);
+  assert.ok(start.x > 0 && start.x <= .2);
+  const reverse = steerVelocity({ x: 2.4, z: 0 }, { x: -2.4, z: 0 }, .05);
+  assert.ok(reverse.x > 2, 'a direction change preserves momentum');
+  let velocity = { x: 2.4, z: 0 };
+  for (let i = 0; i < 10; i++) velocity = steerVelocity(velocity, { x: 0, z: 0 }, .05);
+  assert.deepEqual(velocity, { x: 0, z: 0 });
+  const simulate = (dt: number) => {
+    let v = { x: 0, z: 0 };
+    for (let i = 0; i < Math.round(.5 / dt); i++) v = steerVelocity(v, { x: 0, z: 2.4 }, dt);
+    return v.z;
+  };
+  assert.ok(Math.abs(simulate(.05) - simulate(.025)) < 1e-8);
 });

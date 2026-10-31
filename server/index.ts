@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { findPath, turnTowards, type Waypoint } from './navigation.js';
+import { findPath, turnTowards, steerVelocity, walkableSegment, type Waypoint } from './navigation.js';
 import { randomInt, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { extname, resolve, sep } from 'node:path';
@@ -88,6 +88,7 @@ interface Player extends PlayerState {
   blindedUntil: number;
   botTarget?: { x: number; z: number; until: number };
   botPath?: Waypoint[];
+  botVelocity?: Waypoint;
   patrolIndex?: number;
   botReading?: { id: string; since: number };
   distractedUntil: number;
@@ -367,11 +368,22 @@ export async function createGameServer({ port = 3001, host = '0.0.0.0', listen =
     }
   }
 
+  function advanceBot(room: Room, bot: Player, desired: Waypoint) {
+    const dt = TICK_MS / 1000;
+    let velocity = steerVelocity(bot.botVelocity ?? { x: 0, z: 0 }, desired, dt);
+    const next = { x: bot.x + velocity.x * dt, z: bot.z + velocity.z * dt };
+    // Momentum must never cut across the inside of a cover corner.
+    if (!walkableSegment(bot, next)) velocity = { x: 0, z: 0 };
+    const x = bot.x, z = bot.z;
+    move(room, bot, velocity.x * dt, velocity.z * dt);
+    bot.botVelocity = { x: (bot.x - x) / dt, z: (bot.z - z) / dt };
+  }
+
   function updateBot(room: Room, bot: Player, now: number) {
-    if (bot.blindedUntil > now) return;
+    if (bot.blindedUntil > now) { advanceBot(room, bot, { x: 0, z: 0 }); return; }
     const targets = [...room.players.values()].filter(p => p.alive && p.protectedUntil <= now && enemy(room, bot, p) && dist(bot, p) < 23 && foreheadFacing(bot, p) && clearSight(room, bot, p));
     targets.sort((a, b) => dist(bot, a) - dist(bot, b));
-    const target = bot.distractedUntil > now ? undefined : targets[0];
+    const target = bot.distractedUntil > now ? undefined : targets.find(p => p.id === bot.botReading?.id) ?? targets[0];
     if (target) {
       bot.yaw = turnTowards(bot.yaw, Math.atan2(-(target.x - bot.x), -(target.z - bot.z)), TICK_MS / 1000);
       if (bot.botReading?.id !== target.id) bot.botReading = { id: target.id, since: now };
@@ -380,7 +392,8 @@ export async function createGameServer({ port = 3001, host = '0.0.0.0', listen =
         eliminate(room, bot, target, now);
         bot.botReading = undefined;
       }
-      // Hold a readable stance while studying an opponent instead of swaying randomly.
+      // Ease into a readable stance and keep attention on the same visible opponent.
+      advanceBot(room, bot, { x: 0, z: 0 });
       bot.botPath = undefined;
       return;
     }
@@ -397,17 +410,20 @@ export async function createGameServer({ port = 3001, host = '0.0.0.0', listen =
       bot.botPath = undefined;
     }
     bot.botPath ??= findPath(bot, bot.botTarget);
-    while (bot.botPath.length && dist(bot, bot.botPath[0]) < .16) bot.botPath.shift();
+    // Skip a corner only after the full body has a clear route to the next point.
+    while (bot.botPath.length > 1 && walkableSegment(bot, bot.botPath[1])) bot.botPath.shift();
+    while (bot.botPath.length && dist(bot, bot.botPath[0]) < .08) bot.botPath.shift();
     const waypoint = bot.botPath[0];
-    if (!waypoint) { bot.botTarget.until = now; return; }
+    if (!waypoint) { bot.botTarget.until = now; advanceBot(room, bot, { x: 0, z: 0 }); return; }
     const dx = waypoint.x - bot.x, dz = waypoint.z - bot.z;
     const heading = Math.atan2(-dx, -dz);
     bot.yaw = turnTowards(bot.yaw, heading, TICK_MS / 1000);
-    // Turn on the spot at sharp corners before taking the next collision-safe segment.
+    // Slow for sharp turns and close waypoints; build speed gradually on straights.
     const alignment = Math.max(0, Math.cos(heading - bot.yaw));
     const length = Math.hypot(dx, dz);
-    const step = Math.min(length, 2.4 * alignment * TICK_MS / 1000);
-    move(room, bot, dx / length * step, dz / length * step);
+    const pace = 2.25 + Math.max(0, BOT_NAMES.indexOf(bot.name)) % 4 * .1;
+    const speed = Math.min(pace * alignment, Math.sqrt(2 * 4 * length));
+    advanceBot(room, bot, { x: dx / length * speed, z: dz / length * speed });
   }
 
   function tickFlags(room: Room) {
@@ -529,7 +545,7 @@ export async function createGameServer({ port = 3001, host = '0.0.0.0', listen =
             const spawn = teamSpawn(room, p.team);
             p.x = spawn.x; p.z = spawn.z; p.alive = true; p.respawnAt = 0;
             p.number = uniqueNumber(room); p.blindedUntil = 0; p.seen.clear(); p.stamina = 100; p.protectedUntil = now + Math.max(0, respawnGraceMs);
-            p.botPath = undefined; p.botTarget = undefined;
+            p.botPath = undefined; p.botTarget = undefined; p.botVelocity = undefined;
             p.input.forward = p.input.strafe = 0;
             const center = MAP_CENTERS[room.map];
             p.yaw = Math.atan2(-(center.x - p.x), -(center.z - p.z));
