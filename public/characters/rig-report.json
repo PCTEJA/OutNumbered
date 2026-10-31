@@ -1,7 +1,9 @@
 [
   {
     "variant": "c01",
-    "triangles": 22488,
+    "triangles": 31982,
+    "boundaryEdges": 0,
+    "nonManifoldEdges": 0,
     "bones": 17,
     "clips": [
       "Idle",
@@ -11,7 +13,9 @@
   },
   {
     "variant": "c01f",
-    "triangles": 22499,
+    "triangles": 31998,
+    "boundaryEdges": 0,
+    "nonManifoldEdges": 0,
     "bones": 17,
     "clips": [
       "Idle",

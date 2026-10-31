@@ -2,7 +2,7 @@
 Run: blender -b --python scripts/build-character-rigs.py
 Coordinates here are Blender Z-up, facing -Y; glTF exporter converts to Y-up.
 """
-import bpy, math, json
+import bpy, bmesh, math, json
 from pathlib import Path
 from mathutils import Vector
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,8 +20,19 @@ for variant, filename in [('c01','c01-varsity'), ('c01f','c01f-varsity')]:
  bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
  low=min(v.co.z for v in mesh.data.vertices)
  for v in mesh.data.vertices: v.co.z-=low
- dec=mesh.modifiers.new('Game topology','DECIMATE'); dec.ratio=.045
+ # The imported UV islands have duplicate boundary vertices. Decimating them
+ # independently opens real cracks; weld geometry first, keeping per-loop UVs.
+ bm=bmesh.new(); bm.from_mesh(mesh.data)
+ bmesh.ops.remove_doubles(bm,verts=list(bm.verts),dist=.00001)
+ bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
+ bm.to_mesh(mesh.data); bm.free()
+ dec=mesh.modifiers.new('Game topology','DECIMATE'); dec.ratio=.064
  bpy.ops.object.modifier_apply(modifier=dec.name)
+ bm=bmesh.new(); bm.from_mesh(mesh.data)
+ boundary_edges=sum(e.is_boundary for e in bm.edges)
+ nonmanifold_edges=sum(not e.is_manifold for e in bm.edges)
+ bm.free()
+ assert nonmanifold_edges == 0, f'{variant}: simplification opened the surface'
  for p in mesh.data.polygons: p.use_smooth=True
  mesh.name=f'Varsity_{variant}'
  bpy.ops.object.armature_add(enter_editmode=True)
@@ -99,6 +110,6 @@ for variant, filename in [('c01','c01-varsity'), ('c01f','c01f-varsity')]:
  scene.frame_set(0)
  bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/f'docs/animation/{variant}-rig.blend'))
  bpy.ops.export_scene.gltf(filepath=str(OUT/f'{variant}-animated.glb'),export_format='GLB',export_animations=True,export_animation_mode='NLA_TRACKS',export_force_sampling=True,export_anim_slide_to_zero=True)
- report.append({'variant':variant,'triangles':sum(len(p.vertices)-2 for p in mesh.data.polygons),'bones':len(rig.data.bones),'clips':['Idle','Walk','Run']})
+ report.append({'variant':variant,'triangles':sum(len(p.vertices)-2 for p in mesh.data.polygons),'boundaryEdges':boundary_edges,'nonManifoldEdges':nonmanifold_edges,'bones':len(rig.data.bones),'clips':['Idle','Walk','Run']})
 (OUT/'rig-report.json').write_text(json.dumps(report,indent=2))
 print(json.dumps(report))

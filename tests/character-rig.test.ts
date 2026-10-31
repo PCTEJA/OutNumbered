@@ -42,8 +42,34 @@ for (const variant of ['c01', 'c01f']) test(`${variant} GLB has bounded game geo
     }
   }
   for (const mesh of gltf.meshes) for (const primitive of mesh.primitives) {
-    assert.ok(gltf.accessors[primitive.indices].count / 3 < 25000);
+    const triangles = gltf.accessors[primitive.indices].count / 3;
+    assert.ok(triangles >= 30000 && triangles < 35000, 'retain at least 5,000 more triangles than the original 22,500-triangle rigs');
     const positions = read(primitive.attributes.POSITION), joints = read(primitive.attributes.JOINTS_0), weights = read(primitive.attributes.WEIGHTS_0);
+    // UV seams may split exported vertices, but must not split the surface or
+    // acquire different skin weights that pull it apart during animation.
+    const welded = new Map<string, number>();
+    const vertexIds = positions.map((p, i) => {
+      const key = p.map(v => v.toFixed(7)).join(',');
+      const previous = welded.get(key);
+      if (previous !== undefined) {
+        assert.deepEqual(joints[i], joints[previous], 'UV seam joints must agree');
+        assert.deepEqual(weights[i], weights[previous], 'UV seam weights must agree');
+        return previous;
+      }
+      welded.set(key, i);
+      return i;
+    });
+    const edges = new Map<string, number>();
+    const indices = read(primitive.indices).flat();
+    for (let i = 0; i < indices.length; i += 3) {
+      const tri = indices.slice(i, i + 3).map(index => vertexIds[index]);
+      for (let j = 0; j < 3; j++) {
+        const a = tri[j], b = tri[(j + 1) % 3];
+        const key = a < b ? `${a}/${b}` : `${b}/${a}`;
+        edges.set(key, (edges.get(key) ?? 0) + 1);
+      }
+    }
+    assert.equal([...edges.values()].filter(count => count !== 2).length, 0, 'character surface must be closed across every UV seam');
     let maximumFingerLegWeight = 0;
     positions.forEach((p, i) => {
       assert.ok(Math.abs(weights[i].reduce((sum, w) => sum + w, 0) - 1) < 1e-5);

@@ -1,0 +1,14 @@
+[
+  {
+    "variant": "c01",
+    "recoloredPixels": 136319,
+    "residualBlueCorePixels": 0,
+    "upperShoulderChecks": 237
+  },
+  {
+    "variant": "c01f",
+    "recoloredPixels": 141242,
+    "residualBlueCorePixels": 0,
+    "upperShoulderChecks": 85
+  }
+]
