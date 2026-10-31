@@ -451,6 +451,11 @@ export class Game {
     for (const player of state.players) {
       if (player.id === this.id) continue;
       let rendered = this.players.get(player.id);
+      if (rendered && rendered.state.team !== player.team) {
+        disposeAvatar(rendered.group);
+        this.players.delete(player.id);
+        rendered = undefined;
+      }
       if (!rendered) {
         const group = createAvatar(player.number, player.team, player.name);
         group.position.set(player.x, 0, player.z);

@@ -4,6 +4,8 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 
 const assets = new Map<string, Promise<GLTF>>();
 const loader = new GLTFLoader();
+const jacketLoader = new THREE.TextureLoader();
+const jackets = new Map<string, Promise<THREE.Texture>>();
 /** Inset digits on the existing white forehead strap, with a small depth clearance. */
 export function placeNumberOnStrap(plate: THREE.Mesh, female: boolean) {
   plate.matrixAutoUpdate = true;
@@ -51,7 +53,17 @@ export function loadCharacterRig(group: THREE.Group, female: boolean) {
   const url = `/characters/${female ? 'c01f' : 'c01'}-animated.glb`;
   let asset = assets.get(url);
   if (!asset) { asset = loader.loadAsync(url); assets.set(url, asset); }
-  void asset.then(gltf => {
+  const jacketUrl = `/characters/${female ? 'c01f' : 'c01'}-${group.userData.team === 'red' ? 'red' : 'blue'}.png`;
+  let jacket = jackets.get(jacketUrl);
+  if (!jacket) {
+    jacket = jacketLoader.loadAsync(jacketUrl).then(texture => {
+      texture.flipY = false;
+      texture.colorSpace = THREE.SRGBColorSpace;
+      return texture;
+    });
+    jackets.set(jacketUrl, jacket);
+  }
+  void Promise.all([asset, jacket]).then(([gltf, jacketTexture]) => {
     if (group.userData.disposed) return;
     const model = clone(gltf.scene);
     // Each avatar owns its geometry/materials; removing a player cannot invalidate another.
@@ -61,7 +73,7 @@ export function loadCharacterRig(group: THREE.Group, female: boolean) {
       object.material = Array.isArray(object.material) ? object.material.map(m => m.clone()) : object.material.clone();
       for (const mat of Array.isArray(object.material) ? object.material : [object.material]) {
         if (mat instanceof THREE.MeshStandardMaterial) {
-          if (mat.map) mat.map = mat.map.clone();
+          if (mat.map) mat.map = jacketTexture.clone();
           mat.metalness = 0;
           mat.metalnessMap = null;
           mat.roughness = .85;
@@ -91,7 +103,7 @@ export function loadCharacterRig(group: THREE.Group, female: boolean) {
     ring.rotation.x = -Math.PI / 2; ring.position.y = .025;
     group.add(model, ring);
     group.userData.motionRig = rig;
-  }).catch(error => { console.warn('Character rig unavailable; using articulated fallback.', error); assets.delete(url); });
+  }).catch(error => { console.warn('Character rig unavailable; using articulated fallback.', error); assets.delete(url); jackets.delete(jacketUrl); });
 }
 
 export function animateCharacterRig(group: THREE.Group, time: number, amount: number, phase?: number, speed?: number) {
